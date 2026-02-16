@@ -6,13 +6,16 @@ from fastapi import FastAPI
 
 app = FastAPI()
 
+# Add this health check endpoint
 @app.get("/health")
 async def health_check():
     """Health check endpoint for Render"""
     return {
         "status": "healthy",
-        "service": "fdt-backend"
+        "service": "fdt-user-backend",
+        "version": "1.0.0"
     }
+
     
 import os
 import sys
