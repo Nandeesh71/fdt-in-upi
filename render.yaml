@@ -1,11 +1,13 @@
 # render.yaml - Render Deployment Configuration
 services:
+
   # ==========================================
   # Frontend - React PWA (Static Site)
   # ==========================================
   - type: web
     name: fdt-frontend
     env: static
+    plan: free
     buildCommand: cd frontend && npm ci && npm run build
     staticPublishPath: frontend/build
     routes:
@@ -19,23 +21,21 @@ services:
         value: https://fdt-admin-backend.onrender.com
 
   # ==========================================
-  # User Backend - FastAPI (Port 8001)
+  # User Backend - FastAPI
   # ==========================================
   - type: web
     name: fdt-user-backend
     env: python
     region: oregon
-    plan: starter
+    plan: free
     buildCommand: |
       pip install --upgrade pip
       pip install -r requirements.txt
     startCommand: |
-      uvicorn backend.server:app --host 0.0.0.0 --port $PORT --workers 2 --log-level info
+      uvicorn backend.server:app --host 0.0.0.0 --port $PORT --workers 1 --log-level info
     healthCheckPath: /health
     autoDeploy: true
     envVars:
-      - key: PORT
-        value: 8001
       - key: DB_URL
         fromDatabase:
           name: fdt-database
@@ -57,23 +57,21 @@ services:
         value: "3.11.9"
 
   # ==========================================
-  # Admin Backend - FastAPI (Port 8000)
+  # Admin Backend - FastAPI
   # ==========================================
   - type: web
     name: fdt-admin-backend
     env: python
     region: oregon
-    plan: starter
+    plan: free
     buildCommand: |
       pip install --upgrade pip
       pip install -r requirements.txt
     startCommand: |
-      uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 2 --log-level info
+      uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1 --log-level info
     healthCheckPath: /health
     autoDeploy: true
     envVars:
-      - key: PORT
-        value: 8000
       - key: DB_URL
         fromDatabase:
           name: fdt-database
@@ -94,22 +92,22 @@ services:
         value: "3.11.9"
 
   # ==========================================
-  # Redis Key-Value Store
+  # Redis (Free Tier)
   # ==========================================
   - type: redis
     name: fdt-redis
     region: oregon
-    plan: starter
+    plan: free
     maxmemoryPolicy: allkeys-lru
     ipAllowList: []
 
 # ==========================================
-# PostgreSQL Database
+# PostgreSQL Database (Free Tier)
 # ==========================================
 databases:
   - name: fdt-database
     databaseName: fdt_db
     user: fdt
-    plan: starter
+    plan: free
     region: oregon
     ipAllowList: []
