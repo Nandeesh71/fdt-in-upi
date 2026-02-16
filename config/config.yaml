@@ -1,0 +1,29 @@
+admin_password_hash: $pbkdf2-sha256$29000$hnDuPeec07q3FkIIASDEWA$fe/8PRbnpK05nysmgl6Z4rqnB5jZ4BFQxoHGK1OgTXo
+admin_username: jerold
+admin_users:
+- password_hash: $pbkdf2-sha256$29000$hnDuPeec07q3FkIIASDEWA$fe/8PRbnpK05nysmgl6Z4rqnB5jZ4BFQxoHGK1OgTXo
+  role: Super Admin
+  username: jerold
+- password_hash: $pbkdf2-sha256$29000$eK9VKkWIUer937u3NgbA2A$XP6l9OKx4WINeMkbokfJHEDHWFXEOnhO2YxKWKvWtTo
+  role: Admin
+  username: aakash
+- password_hash: $pbkdf2-sha256$29000$fa.1du69F4LQ2nsPwVirVQ$NwpxqIGAtOwRxj7XaFEl7R3KCreGo4tImocIHFbNyPc
+  role: Admin
+  username: abhishek
+- password_hash: $pbkdf2-sha256$29000$UWptzZlzDqGUEqI0JuQ8hw$/JxT5C38CHMU06vhc5/ROa/448NeY/cozO8Kc9ttM1M
+  role: Admin
+  username: aarthi
+db_url: postgresql://fdt:fdtpass@127.0.0.1:5432/fdt_db
+secret_key: qdqBymrlHc4wrM_E2TfifjUjnEsjxh-9NGKCQaecrQw
+thresholds:
+  allowMax: 0.45
+  block: 0.75
+  blockMin: 0.5
+  delay: 0.45
+  delayMax: 0.55
+  highConfidence: 0.85
+  isoWeight: 25
+  lowConfidence: 0.4
+  mediumConfidence: 0.7
+  rfWeight: 35
+  xgbWeight: 40

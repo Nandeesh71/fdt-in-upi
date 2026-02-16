@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#4F46E5" />
+    <meta name="description" content="FDT - Real-time fraud detection for UPI transactions" />
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+    
+    <!-- DNS Prefetch & Preconnect for faster API calls -->
+    <link rel="dns-prefetch" href="https://w1r757gb-8001.inc1.devtunnels.ms" />
+    <link rel="preconnect" href="https://w1r757gb-8001.inc1.devtunnels.ms" crossorigin />
+    
+    <title>FDT - Fraud Detection</title>
+    
+    <!-- Tailwind CSS CDN - For development only. For production, use @tailwindcss/postcss or Tailwind CLI -->
+    <!-- See: https://tailwindcss.com/docs/installation -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+          'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+      
+      code {
+        font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+          monospace;
+      }
+      
+      /* Mobile-first responsive design */
+      @media (min-width: 640px) {
+        .mobile-container {
+          max-width: 480px;
+          margin: 0 auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+  </body>
+</html>

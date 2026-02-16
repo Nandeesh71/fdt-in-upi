@@ -1,0 +1,1525 @@
+<!-- templates/dashboard.html (compact/responsive version) -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>UPI Fraud Detection Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root { --card-radius: 12px; --card-padding: 14px; }
+    body { background: linear-gradient(135deg, #eff6ff 0%, #f5f3ff 50%, #fff0f6 100%); font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; }
+    .card { background: #fff; border-radius: var(--card-radius); padding: var(--card-padding); box-shadow: 0 6px 14px rgba(22,24,35,0.06); }
+    .accent-border { border-left-width: 5px; }
+    .small-text { font-size: 0.85rem; }
+    .stat-value { font-weight: 700; }
+    .chart-wrap { height: 220px; }
+    .table-scroll { max-height: 320px; overflow-y: auto; }
+    
+    /* Chatbot Styles - Premium Design */
+    .chatbot-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 1000;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    
+    .chatbot-button {
+      width: 70px;
+      height: 70px;
+      border-radius: 50%;
+      background: linear-gradient(145deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgba(102, 126, 234, 0.5), 0 0 0 0 rgba(102, 126, 234, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .chatbot-button::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 0;
+      height: 0;
+      background: rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      transition: width 0.6s, height 0.6s;
+    }
+    
+    .chatbot-button:hover {
+      transform: scale(1.15) translateY(-5px);
+      box-shadow: 0 12px 32px rgba(102, 126, 234, 0.6), 0 0 20px rgba(240, 147, 251, 0.4);
+    }
+    
+    .chatbot-button:active {
+      transform: scale(1.08) translateY(-2px);
+    }
+    
+    .chatbot-button:hover::before {
+      width: 300px;
+      height: 300px;
+    }
+    
+    .chatbot-window {
+      display: none;
+      position: fixed;
+      bottom: 110px;
+      right: 24px;
+      width: 420px;
+      height: 620px;
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2), 0 0 1px rgba(0, 0, 0, 0.1);
+      flex-direction: column;
+      overflow: hidden;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.8);
+      animation: slideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px) scale(0.95);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+    
+    .chatbot-window.open {
+      display: flex;
+    }
+    
+    .chatbot-header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+      color: white;
+      padding: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: relative;
+    }
+    
+    .chatbot-header::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+    }
+    
+    .chatbot-header div:first-child {
+      flex: 1;
+    }
+    
+    .chatbot-header .font-bold {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      margin-bottom: 4px;
+    }
+    
+    .chatbot-header .text-xs {
+      font-size: 12px;
+      opacity: 0.9;
+      font-weight: 500;
+    }
+    
+    .chatbot-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      background: linear-gradient(180deg, #fafbfc 0%, #f0f4f8 100%);
+      scroll-behavior: smooth;
+    }
+    
+    .chatbot-messages::-webkit-scrollbar {
+      width: 6px;
+    }
+    
+    .chatbot-messages::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    
+    .chatbot-messages::-webkit-scrollbar-thumb {
+      background: rgba(102, 126, 234, 0.3);
+      border-radius: 3px;
+    }
+    
+    .chatbot-messages::-webkit-scrollbar-thumb:hover {
+      background: rgba(102, 126, 234, 0.5);
+    }
+    
+    .chatbot-message {
+      margin-bottom: 16px;
+      display: flex;
+      gap: 12px;
+      animation: fadeIn 0.3s ease-in;
+    }
+    
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    .chatbot-message.user {
+      flex-direction: row-reverse;
+    }
+    
+    .chatbot-message-content {
+      max-width: 80%;
+      padding: 14px 16px;
+      border-radius: 16px;
+      font-size: 14px;
+      line-height: 1.8;
+      word-wrap: break-word;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: 'Segoe UI', system-ui, monospace;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      transition: all 0.2s ease;
+      overflow-wrap: break-word;
+    }
+    
+    .chatbot-message.bot .chatbot-message-content {
+      background: white;
+      color: #1f2937;
+      border: 1px solid #e5e7eb;
+      border-radius: 16px 16px 16px 4px;
+    }
+    
+    .chatbot-message.bot .chatbot-message-content:hover {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    }
+    
+    .chatbot-message.user .chatbot-message-content {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border-radius: 16px 16px 4px 16px;
+      font-weight: 500;
+    }
+    
+    .chatbot-input-area {
+      padding: 16px;
+      border-top: 1px solid #e5e7eb;
+      background: white;
+      position: relative;
+    }
+    
+    .chatbot-input-area::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, #e5e7eb, transparent);
+    }
+    
+    .chatbot-input-wrapper {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    
+    .chatbot-input {
+      flex: 1;
+      padding: 12px 16px;
+      border: 1.5px solid #d1d5db;
+      border-radius: 24px;
+      font-size: 14px;
+      outline: none;
+      transition: all 0.3s ease;
+      background: #f9fafb;
+      font-family: inherit;
+    }
+    
+    .chatbot-input:focus {
+      border-color: #667eea;
+      background: white;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+    
+    .chatbot-input::placeholder {
+      color: #9ca3af;
+      font-style: italic;
+    }
+    
+    .chatbot-send-btn {
+      padding: 12px 24px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 24px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-width: 50px;
+      white-space: nowrap;
+    }
+    
+    .chatbot-send-btn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+    }
+    
+    .chatbot-send-btn:active:not(:disabled) {
+      transform: translateY(0);
+    }
+    
+    .chatbot-send-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .typing-indicator {
+      display: flex;
+      gap: 5px;
+      padding: 12px 16px;
+      background: white;
+      border-radius: 16px;
+      border: 1px solid #e5e7eb;
+      width: fit-content;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    }
+    
+    .typing-indicator span {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      animation: typing 1.4s infinite;
+      box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+    }
+    
+    .typing-indicator span:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+    
+    .typing-indicator span:nth-child(3) {
+      animation-delay: 0.4s;
+    }
+    
+    @keyframes typing {
+      0%, 60%, 100% { 
+        transform: translateY(0);
+        opacity: 0.6;
+      }
+      30% { 
+        transform: translateY(-12px);
+        opacity: 1;
+      }
+    }
+    
+    /* Risk Score Info Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.4);
+      backdrop-filter: blur(2px);
+      z-index: 2000;
+      opacity: 0;
+      animation: fadeIn 0.3s ease-in-out forwards;
+    }
+    
+    .modal-overlay.open {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    
+    .info-modal {
+      background: white;
+      border-radius: 24px;
+      max-width: 650px;
+      width: 90%;
+      max-height: 85vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      animation: slideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    
+    .info-modal-header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+      color: white;
+      padding: 32px;
+      border-radius: 24px 24px 0 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 20px;
+    }
+    
+    .info-modal-header h2 {
+      font-size: 28px;
+      font-weight: 700;
+      margin: 0;
+      flex: 1;
+    }
+    
+    .info-modal-header .close-btn {
+      background: rgba(255, 255, 255, 0.2);
+      border: none;
+      color: white;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s ease;
+      flex-shrink: 0;
+    }
+    
+    .info-modal-header .close-btn:hover {
+      background: rgba(255, 255, 255, 0.3);
+      transform: rotate(90deg);
+    }
+    
+    .info-modal-content {
+      padding: 32px;
+      font-size: 15px;
+      line-height: 1.8;
+      color: #1f2937;
+    }
+    
+    .info-section {
+      margin-bottom: 28px;
+    }
+    
+    .info-section:last-child {
+      margin-bottom: 0;
+    }
+    
+    .info-section h3 {
+      font-size: 18px;
+      font-weight: 700;
+      color: #667eea;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .info-section p {
+      margin: 8px 0;
+      color: #374151;
+    }
+    
+    .risk-factors {
+      background: #f8fafc;
+      border-left: 4px solid #667eea;
+      padding: 16px;
+      border-radius: 8px;
+      margin: 12px 0;
+    }
+    
+    .risk-factors ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    
+    .risk-factors li {
+      padding: 8px 0;
+      margin: 0;
+      display: flex;
+      gap: 10px;
+    }
+    
+    .risk-factors li::before {
+      content: '📌';
+      flex-shrink: 0;
+    }
+    
+    .risk-threshold {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+      margin: 16px 0;
+    }
+    
+    .threshold-card {
+      background: linear-gradient(135deg, #f5f7fa 0%, #f0f4f8 100%);
+      padding: 16px;
+      border-radius: 12px;
+      border: 1px solid #e5e7eb;
+      text-align: center;
+      transition: all 0.3s ease;
+    }
+    
+    .threshold-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+      border-color: #667eea;
+    }
+    
+    .threshold-card.high-risk {
+      background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+      border-color: #fca5a5;
+    }
+    
+    .threshold-card.medium-risk {
+      background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+      border-color: #fcd34d;
+    }
+    
+    .threshold-card.low-risk {
+      background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+      border-color: #86efac;
+    }
+    
+    .threshold-card .emoji {
+      font-size: 28px;
+      margin-bottom: 8px;
+    }
+    
+    .threshold-card .label {
+      font-weight: 700;
+      font-size: 13px;
+      color: #374151;
+      margin-bottom: 6px;
+    }
+    
+    .threshold-card .value {
+      font-size: 16px;
+      font-weight: 700;
+      color: #1f2937;
+      margin-bottom: 6px;
+    }
+    
+    .threshold-card .desc {
+      font-size: 12px;
+      color: #6b7280;
+      line-height: 1.4;
+    }
+    
+    .info-highlight {
+      background: linear-gradient(120deg, #fff7ed 0%, #fff5f1 100%);
+      border-left: 4px solid #f97316;
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin: 16px 0;
+      font-weight: 500;
+      color: #7c2d12;
+    }
+    
+    .info-tip {
+      background: linear-gradient(120deg, #eff6ff 0%, #f0f9ff 100%);
+      border-left: 4px solid #3b82f6;
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin: 16px 0;
+      font-size: 14px;
+      color: #1e40af;
+    }
+  </style>
+</head>
+<body class="py-6">
+  <div class="max-w-6xl mx-auto px-4">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-3xl md:text-4xl font-extrabold bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent leading-tight">
+          UPI Fraud Detection System
+        </h1>
+        <p class="text-gray-600 small-text mt-1">Real-time monitoring • Sri Sairam Engineering College</p>
+      </div>
+      <div class="flex gap-3 items-center">
+        <select id="timeRange" class="px-3 py-2 border rounded-lg bg-white small-text">
+          <option value="1h">Last Hour</option>
+          <option value="24h" selected>Last 24 Hours</option>
+          <option value="7d">Last 7 Days</option>
+          <option value="30d">Last 30 Days</option>
+        </select>
+
+        <button id="infoBtn" class="px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg small-text hover:shadow-lg transition-all" title="Risk Score Info">
+          ℹ️ Risk Score
+        </button>
+
+        <button id="exportBtn" class="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg small-text">
+          Export
+        </button>
+
+        <!-- ADMIN LOGIN BUTTON ADDED (redirects to admin login) -->
+        <a id="adminLoginBtn" href="/admin/login" class="px-4 py-2 bg-gray-800 text-white rounded-lg small-text">Admin Login</a>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div class="card accent-border" style="border-color:#6366F1">
+        <p class="text-gray-600 small-text">Total Transactions</p>
+        <h2 id="totalTx" class="text-2xl stat-value text-[#6366F1]">0</h2>
+        <p class="text-xs text-gray-500">Last 24 hours</p>
+      </div>
+
+      <div class="card accent-border" style="border-color:#EF4444">
+        <p class="text-gray-600 small-text">Blocked</p>
+        <h2 id="blockedTx" class="text-2xl stat-value text-[#EF4444]">0</h2>
+        <p class="text-xs text-gray-500">Requires review</p>
+      </div>
+
+      <div class="card accent-border" style="border-color:#F59E0B">
+        <p class="text-gray-600 small-text">Delayed</p>
+        <h2 id="delayedTx" class="text-2xl stat-value text-[#F59E0B]">0</h2>
+        <p class="text-xs text-gray-500">Pending verification</p>
+      </div>
+
+      <div class="card accent-border" style="border-color:#10B981">
+        <p class="text-gray-600 small-text">Allowed</p>
+        <h2 id="allowedTx" class="text-2xl stat-value text-[#10B981]">0</h2>
+        <p class="text-xs text-gray-500">Cleared</p>
+      </div>
+    </div>
+
+    <!-- Charts + table grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+      <div class="lg:col-span-2 card">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-lg font-bold">Transaction Activity Timeline</h3>
+          <div class="text-sm text-gray-500">Real-time</div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="timelineChart" style="height:220px;width:100%"></canvas>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="text-lg font-bold mb-3">Risk Distribution</h3>
+        <div class="chart-wrap">
+          <canvas id="riskPie" style="height:220px;width:100%"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+      <div class="card">
+        <h3 class="text-lg font-bold mb-3">Fraud Pattern Analysis</h3>
+        <div class="chart-wrap">
+          <canvas id="fraudBar" style="height:220px;width:100%"></canvas>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="text-lg font-bold mb-3">Recent High-Risk Alerts</h3>
+        <div id="alertsList" class="space-y-2 max-h-[300px] overflow-y-auto small-text text-gray-700">
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-6">
+  <div class="flex items-center justify-between mb-2">
+    <h3 class="text-lg font-bold">Recent Transactions</h3>
+
+    <!-- 🔽 ADDED: Action filter dropdown -->
+    <select id="txFilter"
+      class="px-3 py-1 border rounded-md text-sm bg-white">
+      <option value="ALL">All</option>
+      <option value="ALLOW">Allowed</option>
+      <option value="BLOCK">Blocked</option>
+      <option value="DELAY">Delayed</option>
+    </select>
+  </div>
+      <div class="overflow-x-auto table-scroll">
+        <table class="min-w-full text-sm">
+          <thead class="bg-gray-50 small-text">
+            <tr>
+              <th class="px-3 py-2 text-left">Time</th>
+              <th class="px-3 py-2 text-left">TX ID</th>
+              <th class="px-3 py-2 text-left">User</th>
+              <th class="px-3 py-2 text-left">Amount</th>
+              <th class="px-3 py-2 text-left">Type</th>
+              <th class="px-3 py-2 text-left">Channel</th>
+              <th class="px-3 py-2 text-left">Risk Score</th>
+            </tr>
+          </thead>
+          <tbody id="txTbody" class="bg-white divide-y divide-gray-100 small-text">
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="bg-gradient-to-r from-green-500 to-emerald-500 rounded-xl p-3 text-white flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-3 h-3 bg-white rounded-full animate-pulse"></div>
+        <div>
+          <div class="font-bold small-text">System Status: Active</div>
+          <div class="text-xs opacity-90">Realtime websocket updates</div>
+        </div>
+      </div>
+      <div class="flex gap-4 text-xs">
+        <div>ML Accuracy: <span class="font-bold">98.7%</span></div>
+        <div>Avg RT: <span class="font-bold">12ms</span></div>
+        <div>Active Users: <span class="font-bold" id="activeUsers">0</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Risk Score Info Modal -->
+  <div class="modal-overlay" id="riskScoreModal">
+    <div class="info-modal">
+      <div class="info-modal-header">
+        <h2>📊 Understanding Risk Scores</h2>
+        <button class="close-btn" id="closeModal" title="Close">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+      
+      <div class="info-modal-content">
+        <div class="info-section">
+          <h3>💡 What is a Risk Score?</h3>
+          <p>
+            A <strong>Risk Score</strong> is a numerical value ranging from <strong>0 to 1</strong> that represents 
+            the probability of a transaction being fraudulent. Our advanced fraud detection system analyzes multiple 
+            factors to calculate this score in real-time.
+          </p>
+        </div>
+
+        <div class="info-section">
+          <h3>🔍 Factors That Influence Risk Score</h3>
+          <div class="risk-factors">
+            <ul>
+              <li><strong>Transaction Amount</strong> – Unusually large or unusual transaction amounts trigger higher risk</li>
+              <li><strong>User History</strong> – Frequency patterns, transaction history, and account behavior</li>
+              <li><strong>Device ID</strong> – New devices, location mismatches, and suspicious device activity</li>
+              <li><strong>Transaction Type</strong> – Person-to-person, bill payments, fund transfers, etc.</li>
+              <li><strong>Channel</strong> – Mobile app, web, SMS, USSD, and other channels</li>
+              <li><strong>Recipient VPA Patterns</strong> – Patterns and history of the recipient's Virtual Payment Address</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="info-section">
+          <h3>⚖️ Risk Score Thresholds</h3>
+          <div class="risk-threshold">
+            <div class="threshold-card low-risk">
+              <div class="emoji">✅</div>
+              <div class="label">LOW RISK</div>
+              <div class="value">0.0 - 0.29</div>
+              <div class="desc">Transaction ALLOWED automatically</div>
+            </div>
+            <div class="threshold-card medium-risk">
+              <div class="emoji">⚠️</div>
+              <div class="label">MEDIUM RISK</div>
+              <div class="value">0.30 - 0.59</div>
+              <div class="desc">Transaction DELAYED for verification</div>
+            </div>
+            <div class="threshold-card high-risk">
+              <div class="emoji">🚫</div>
+              <div class="label">HIGH RISK</div>
+              <div class="value">0.60 - 1.0</div>
+              <div class="desc">Transaction BLOCKED immediately</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="info-section">
+          <h3>📈 How It Works</h3>
+          <p>
+            When a transaction is initiated, our machine learning models instantly:
+          </p>
+          <div class="risk-factors">
+            <ul>
+              <li>Analyze the transaction details and user profile</li>
+              <li>Compare against historical patterns and known fraud indicators</li>
+              <li>Generate a risk score based on weighted factors</li>
+              <li>Make an automatic decision (Allow/Delay/Block)</li>
+              <li>Log the transaction for audit and continuous improvement</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="info-section">
+          <div class="info-highlight">
+            🎯 <strong>Current System Performance:</strong> Our system analyzes transactions in milliseconds, 
+            achieving high accuracy while maintaining seamless user experience.
+          </div>
+        </div>
+
+        <div class="info-section">
+          <div class="info-tip">
+            💡 <strong>Tip:</strong> Use the AI Assistant chatbot to ask about specific transactions, 
+            analyze risk patterns, and get detailed fraud detection insights. Click the 💬 button at the bottom-right!
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI Chatbot Widget - Premium Design -->
+  <div class="chatbot-container">
+    <button class="chatbot-button" id="chatbotToggle" aria-label="Toggle Chatbot" title="AI Assistant">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2C6.48 2 2 6.48 2 12C2 13.93 2.65 15.71 3.75 17.13L2.05 21.95L7.13 20.25C8.56 21.35 10.22 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2Z" fill="white" opacity="0.9"/>
+        <circle cx="8" cy="12" r="1.5" fill="white"/>
+        <circle cx="12" cy="12" r="1.5" fill="white"/>
+        <circle cx="16" cy="12" r="1.5" fill="white"/>
+      </svg>
+    </button>
+    
+    <div class="chatbot-window" id="chatbotWindow">
+      <div class="chatbot-header">
+        <div>
+          <div class="font-bold">💬 AI Assistant</div>
+          <div class="text-xs">Fraud Detection Analytics</div>
+        </div>
+        <button id="chatbotClose" class="text-white hover:opacity-70 transition-opacity" title="Close">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+      
+      <div class="chatbot-messages" id="chatbotMessages">
+        <div class="chatbot-message bot">
+          <div class="chatbot-message-content">
+            <strong style="font-size: 16px; color: #667eea;">👋 Welcome!</strong>
+
+I'm your AI assistant for the UPI Fraud Detection System. I analyze transactions and provide real-time fraud detection insights.
+
+<strong>What I Can Help You With:</strong>
+
+• 📊 Analytics & statistics
+• 🔍 Individual transaction details
+• 📈 Fraud patterns & trends
+• 💡 Risk score analysis
+
+<strong>Try asking:</strong>
+
+• "Analyse last 5 transactions"
+• "Show me high-risk transactions"
+• "What's the total fraud rate?"
+• "Explain transaction X" (with ID)
+
+What would you like to know?
+          </div>
+        </div>
+      </div>
+      
+      <div class="chatbot-input-area">
+        <div class="chatbot-input-wrapper">
+          <input 
+            type="text" 
+            class="chatbot-input" 
+            id="chatbotInput" 
+            placeholder="Ask anything... (e.g., 'analyse last 5 transactions')"
+            autocomplete="off"
+          />
+          <button class="chatbot-send-btn" id="chatbotSend" title="Send message">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M16.6915026,12.4744748 L3.50612381,13.2599618 C3.19218622,13.2599618 3.03521743,13.4170592 3.03521743,13.5741566 L1.15159189,20.0151496 C0.8376543,20.8006365 0.99,21.89 1.77946707,22.52 C2.41,22.99 3.50612381,23.1 4.13399899,22.8429026 L21.714504,14.0454487 C22.6563168,13.5741566 23.1272231,12.6315722 22.9702544,11.6889879 L4.13399899,1.16640469 C3.34915502,0.9 2.40734225,1.00636533 1.77946707,1.4776575 C0.994623095,2.10604706 0.837654326,3.0486314 1.15159189,3.99 L3.03521743,10.4309931 C3.03521743,10.5880905 3.19218622,10.7451879 3.50612381,10.7451879 L16.6915026,11.5306748 C16.6915026,11.5306748 17.1624089,11.5306748 17.1624089,12.0019669 C17.1624089,12.4732591 16.6915026,12.4744748 16.6915026,12.4744748 Z" fill="currentColor"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentTimeRange = '24h';
+    let txCache = [];
+    function fmtTS(ts) {
+      try { return new Date(ts).toLocaleString(); } catch(e){ return ts; }
+    }
+    function incCounter(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+
+  // Remove commas and non-numeric characters
+  const raw = el.textContent.replace(/[^0-9.-]/g, '');
+  const current = Number(raw);
+
+  el.textContent = Number.isFinite(current) ? current + 1 : 1;
+}
+
+    const timelineCtx = document.getElementById('timelineChart').getContext('2d');
+    const timelineChart = new Chart(timelineCtx, {
+      type: 'line',
+      data: { labels: [], datasets: [
+        { label: 'Blocked', data: [], borderColor: '#EF4444', tension: 0.3, fill:false },
+        { label: 'Delayed', data: [], borderColor: '#F59E0B', tension: 0.3, fill:false },
+        { label: 'Allowed', data: [], borderColor: '#10B981', tension: 0.3, fill:false }
+      ]},
+      options: { responsive:true, maintainAspectRatio:true, scales:{ x:{}, y:{ beginAtZero:true } } }
+    });
+
+    const riskCtx = document.getElementById('riskPie').getContext('2d');
+    const riskPie = new Chart(riskCtx, {
+      type: 'pie',
+      data: { labels: ['Low','Medium','High','Critical'], datasets: [{
+        data: [70,20,7,3], backgroundColor: ['#6BCF7F','#FFD93D','#FF9F40','#FF6B6B']
+      }]},
+      options: { responsive:true, maintainAspectRatio:true }
+    });
+
+    const fraudCtx = document.getElementById('fraudBar').getContext('2d');
+    const fraudBar = new Chart(fraudCtx, {
+      type: 'bar',
+      data: { labels: ['Unusual Amount','Suspicious Recipient','Rapid Transactions','New Device','Location Mismatch'],
+              datasets: [{ label:'Count', data:[35,28,22,10,5], backgroundColor: ['#FF6B6B','#FF9F40','#FFD93D','#6BCF7F','#4ECDC4']}]},
+      options: { indexAxis: 'y', responsive:true, maintainAspectRatio:true }
+    });
+
+    function makeTxRow(tx) {
+      const o = Object.assign({}, tx || {});
+      const ts = o.ts || o.created_at || o.timestamp || new Date().toISOString();
+      const txid = o.tx_id || o.id || '';
+      const user = o.user_id || o.user || '';
+      const amount = (o.amount === undefined) ? 0 : Number(o.amount);
+      const type = o.action || o.tx_type || o.type || '';
+      const channel = o.channel || '';
+      const risk = Number(o.risk_score ?? o.risk ?? 0).toFixed(2);
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="px-3 py-2">${fmtTS(ts)}</td>
+        <td class="px-3 py-2">${txid}</td>
+        <td class="px-3 py-2">${user}</td>
+        <td class="px-3 py-2">₹${Number(amount || 0).toFixed(2)}</td>
+        <td class="px-3 py-2">${type}</td>
+        <td class="px-3 py-2">${channel}</td>
+        <td class="px-3 py-2 font-medium text-gray-700">${risk}</td>
+      `;
+      return tr;
+    }
+
+  async function loadDashboardData() {
+  try {
+    const timeRange = document.getElementById('timeRange')?.value || '24h';
+
+    const res = await fetch(`/dashboard-data?time_range=${currentTimeRange}`);
+    if (!res.ok) throw new Error('fetch dashboard failed');
+
+    const j = await res.json();
+    const s = j.stats || {};
+
+    // 🔥 SAFELY SET COUNTERS (no NaN)
+    document.getElementById('totalTx').textContent =
+      Number(s.totalTransactions || 0).toLocaleString();
+
+    document.getElementById('blockedTx').textContent =
+      Number(s.blocked || 0).toLocaleString();
+
+    document.getElementById('delayedTx').textContent =
+      Number(s.delayed || 0).toLocaleString();
+
+    document.getElementById('allowedTx').textContent =
+      Number(s.allowed || 0).toLocaleString();
+
+    // 🔥 Update label text under Total Transactions
+    const labelMap = {
+      '1h': 'Last 1 hour',
+      '24h': 'Last 24 hours',
+      '7d': 'Last 7 days',
+      '30d': 'Last 30 days'
+    };
+
+    const labelEl = document.querySelector('#totalTx')?.nextElementSibling;
+    if (labelEl) {
+      labelEl.textContent = labelMap[timeRange] || 'Last 24 hours';
+    }
+
+    // 🔥 Update timeline chart (filtered)
+    /*if (Array.isArray(j.trend)) {
+      timelineChart.data.labels =
+        j.trend.map(t => new Date(t.time).toLocaleTimeString());
+
+      timelineChart.data.datasets[0].data =
+        j.trend.map(t => t.blocked || 0);
+
+      timelineChart.data.datasets[1].data =
+        j.trend.map(t => t.delayed || 0);
+
+      timelineChart.data.datasets[2].data =
+        j.trend.map(t => t.allowed || 0);
+
+      timelineChart.update();
+    }*/
+
+  } catch (e) {
+    console.error('loadDashboardData error', e);
+  }
+}
+
+    
+
+  async function loadRecentTransactions() {
+  try {
+    const res = await fetch(
+      `/recent-transactions?limit=2000&time_range=${currentTimeRange}`
+    );
+    if (!res.ok) throw new Error('fetch recent failed');
+
+    const j = await res.json();
+    txCache = Array.isArray(j.transactions) ? j.transactions : [];
+
+    const tbody = document.getElementById('txTbody');
+    tbody.innerHTML = '';
+    txCache.forEach(tx => tbody.appendChild(makeTxRow(tx)));
+
+    updateHighRiskAlerts(txCache);
+    updateFraudPatternAnalysisFromCache();
+    updateTimelineFromCache();
+    updateRiskDistributionFromCache();
+
+  } catch (e) {
+    console.error('loadRecentTransactions error', e);
+  }
+}
+
+  function updateFraudPatternAnalysisFromCache() {
+  if (!window.txCache || txCache.length === 0) return;
+
+  let unusualAmount = 0;
+  let suspiciousRecipient = 0;
+  let rapidTransactions = 0;
+  let newDevice = 0;
+  let locationMismatch = 0;
+
+  // basic heuristics (you can refine later)
+  txCache.forEach(tx => {
+    if ((tx.amount || 0) > 1000) unusualAmount++;
+    if ((tx.recipient_vpa || '').includes('merchant')) suspiciousRecipient++;
+    if ((tx.risk_score || 0) > 0.6) rapidTransactions++;
+    if ((tx.device_id || '').length > 0) newDevice++;
+    if ((tx.risk_score || 0) > 0.8) locationMismatch++;
+  });
+
+  fraudBar.data.datasets[0].data = [
+    unusualAmount,
+    suspiciousRecipient,
+    rapidTransactions,
+    newDevice,
+    locationMismatch
+  ];
+
+  fraudBar.update();
+}
+    function updateFraudPatternAnalysisFromCache() {
+  if (!Array.isArray(txCache) || txCache.length === 0) return;
+
+  let unusualAmount = 0;
+  let suspiciousRecipient = 0;
+  let rapidTx = 0;
+  let newDevice = 0;
+  let locationMismatch = 0;
+
+  const userCount = {};
+  const recipientCount = {};
+  const deviceSeen = new Set();
+
+  txCache.forEach(tx => {
+    const amt = Number(tx.amount || 0);
+    const user = tx.user_id;
+    const recipient = tx.recipient_vpa;
+    const device = tx.device_id;
+
+    // 1. Unusual amount
+    if (amt > 5000) unusualAmount++;
+
+    // 2. Suspicious recipient (frequency-based)
+    if (recipient) {
+      recipientCount[recipient] = (recipientCount[recipient] || 0) + 1;
+      if (recipientCount[recipient] === 3) suspiciousRecipient++;
+    }
+
+    // 3. Rapid transactions per user
+    if (user) {
+      userCount[user] = (userCount[user] || 0) + 1;
+      if (userCount[user] === 5) rapidTx++;
+    }
+
+    // 4. New device detection
+    if (device && !deviceSeen.has(device)) {
+      deviceSeen.add(device);
+      newDevice++;
+    }
+
+    // 5. Location mismatch (placeholder, non-destructive)
+    if (tx.location_mismatch === true) locationMismatch++;
+  });
+
+  fraudBar.data.datasets[0].data = [
+    unusualAmount,
+    suspiciousRecipient,
+    rapidTx,
+    newDevice,
+    locationMismatch
+  ];
+  fraudBar.update();
+}
+
+function updateRiskDistributionFromCache() {
+  if (!Array.isArray(txCache) || txCache.length === 0) return;
+
+  let low = 0, medium = 0, high = 0, critical = 0;
+
+  txCache.forEach(tx => {
+    const r = Number(tx.risk_score ?? 0);
+
+    if (r < 0.3) low++;
+    else if (r < 0.6) medium++;
+    else if (r < 0.8) high++;
+    else critical++;
+  });
+
+  // 🔥 IMPORTANT: replace array, don't mutate
+  riskPie.data.labels = ['Low', 'Medium', 'High', 'Critical'];
+  riskPie.data.datasets[0].data = [low, medium, high, critical];
+
+  // 🔥 Force redraw
+  riskPie.update('none');
+
+  console.log('Risk pie updated:', low, medium, high, critical);
+}
+
+function updateTimelineFromCache() {
+  if (!Array.isArray(txCache) || txCache.length === 0) return;
+
+  const buckets = {};
+
+  txCache.forEach(tx => {
+    const ts = new Date(tx.ts || tx.created_at || tx.timestamp);
+    if (isNaN(ts)) return;
+
+    const key = ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    if (!buckets[key]) {
+      buckets[key] = { BLOCK: 0, DELAY: 0, ALLOW: 0 };
+    }
+
+    const action = (tx.action || '').toUpperCase();
+    if (buckets[key][action] !== undefined) {
+      buckets[key][action]++;
+    }
+  });
+
+  const labels = Object.keys(buckets).slice(-10);
+
+  timelineChart.data.labels = labels;
+  timelineChart.data.datasets[0].data = labels.map(l => buckets[l].BLOCK);
+  timelineChart.data.datasets[1].data = labels.map(l => buckets[l].DELAY);
+  timelineChart.data.datasets[2].data = labels.map(l => buckets[l].ALLOW);
+
+  timelineChart.update();
+}
+
+function getRangeLabel(range) {
+  switch (range) {
+    case '1h': return 'Last 1 hour';
+    case '24h': return 'Last 24 hours';
+    case '7d': return 'Last 7 days';
+    case '30d': return 'Last 30 days';
+    default: return 'Custom range';
+  }
+}
+
+function safeNumber(el) {
+  if (!el) return 0;
+  const v = el.textContent.replace(/,/g, '').trim();
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+
+function setupWebSocket() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${proto}://${location.host}/ws`);
+
+  ws.onopen = () => console.log('ws connected');
+
+  ws.onmessage = (ev) => {
+    try {
+      const msg = JSON.parse(ev.data);
+      if (!msg || !msg.data) return;
+
+      const txObj = msg.data;
+      const msgType = String(msg.type || '').toLowerCase();
+
+      if (msgType === 'tx_inserted') {
+
+  txCache.unshift(txObj);
+  if (txCache.length > 200) txCache.pop();
+
+  const tbody = document.getElementById('txTbody');
+  tbody.insertBefore(makeTxRow(txObj), tbody.firstChild);
+
+  
+
+  updateHighRiskAlerts(txCache);
+  updateFraudPatternAnalysisFromCache();
+  updateTimelineFromCache();
+  updateRiskDistributionFromCache();
+
+        // 🔥 authoritative refresh (NO math here)
+        loadDashboardData();
+      }
+
+      if (msgType === 'tx_updated') {
+        loadRecentTransactions();
+        loadDashboardData();
+      }
+
+    } catch (e) {
+      console.error('WebSocket error:', e);
+    }
+  };
+
+  ws.onclose = () => setTimeout(setupWebSocket, 2000);
+  ws.onerror = () => ws.close();
+}
+
+  
+
+    // init
+    loadDashboardData();
+    loadRecentTransactions();
+    setupWebSocket();
+    setInterval(loadDashboardData, 30000);
+
+    // export CSV
+    document.getElementById('exportBtn').addEventListener('click', () => {
+      const rows = [['Time','TX ID','User','Amount','Type','Channel','Risk Score']];
+      document.querySelectorAll('#txTbody tr').forEach(tr=>{
+        const cols = [...tr.querySelectorAll('td')].map(td => td.textContent.trim().replace(/\n/g,' '));
+        rows.push(cols);
+      });
+      const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+      const blob = new Blob([csv], {type: 'text/csv'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url;
+      a.download = `transactions_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'_')}.csv`;
+      a.click(); URL.revokeObjectURL(url);
+    });
+  
+  // 🔽 ADDED: Transaction table filter (NO side effects)
+  const txFilter = document.getElementById('txFilter');
+
+  function applyTxFilter() {
+    const filter = txFilter.value;
+    const rows = document.querySelectorAll('#txTbody tr');
+
+    rows.forEach(row => {
+      const typeCell = row.children[4]; // "Type" column
+      if (!typeCell) return;
+
+      const type = typeCell.textContent.trim().toUpperCase();
+
+      if (filter === 'ALL' || type === filter) {
+        row.style.display = '';
+      } else {
+        row.style.display = 'none';
+      }
+    });
+  }
+
+  // Apply filter when dropdown changes
+  txFilter.addEventListener('change', applyTxFilter);
+
+  // Re-apply filter whenever new rows are added (websocket / reload)
+  const originalLoadRecentTransactions = loadRecentTransactions;
+  loadRecentTransactions = async function () {
+    await originalLoadRecentTransactions();
+    applyTxFilter();
+  };
+  
+  function addHighRiskAlert(tx) {
+    const risk = Number(tx.risk_score || 0);
+    if (risk <= 0.8) return;
+
+    const alerts = document.getElementById('alertsList');
+    if (!alerts) return;
+
+    const div = document.createElement('div');
+    div.className = "p-2 rounded bg-red-50 border border-red-200";
+
+    div.innerHTML = `
+      <div class="font-semibold text-red-700">⚠ High Risk (${risk.toFixed(2)})</div>
+      <div class="text-xs text-gray-700">
+        TX: ${tx.tx_id}<br/>
+        User: ${tx.user_id}<br/>
+        Amount: ₹${Number(tx.amount).toFixed(2)}<br/>
+        Action: ${tx.action}
+      </div>
+    `;
+
+    alerts.prepend(div);
+
+    // keep only latest 10 alerts
+    while (alerts.children.length > 10) {
+      alerts.removeChild(alerts.lastChild);
+    }
+  }
+  
+  // ===== FIX: High Risk Alerts (risk_score > 0.8) =====
+  function updateHighRiskAlerts(transactions) {
+    const container = document.getElementById('alertsList');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    transactions
+      .filter(tx => Number(tx.risk_score || 0) >= 0.8)
+      .slice(0, 10)
+      .forEach(tx => {
+        const div = document.createElement('div');
+        div.className = 'p-2 border rounded bg-red-50 text-red-800';
+
+        div.innerHTML = `
+          <div class="font-semibold">${tx.tx_id}</div>
+          <div>User: ${tx.user_id}</div>
+          <div>Amount: ₹${Number(tx.amount).toFixed(2)}</div>
+          <div>Risk Score: <b>${Number(tx.risk_score).toFixed(2)}</b></div>
+          <div>Action: ${tx.action}</div>
+        `;
+        container.appendChild(div);
+      });
+
+    if (!container.children.length) {
+      container.innerHTML =
+        '<div class="text-gray-500">No high-risk transactions</div>';
+    }
+  }
+  document.getElementById('timeRange').addEventListener('change', (e) => {
+  currentTimeRange = e.target.value;
+
+  loadDashboardData();
+  loadRecentTransactions();
+});
+document.getElementById('timeRange').addEventListener('change', () => {
+  loadDashboardData();
+});
+
+// ===== RISK SCORE INFO MODAL =====
+const riskScoreModal = document.getElementById('riskScoreModal');
+const infoBtn = document.getElementById('infoBtn');
+const closeModal = document.getElementById('closeModal');
+
+infoBtn.addEventListener('click', () => {
+  riskScoreModal.classList.add('open');
+});
+
+closeModal.addEventListener('click', () => {
+  riskScoreModal.classList.remove('open');
+});
+
+riskScoreModal.addEventListener('click', (e) => {
+  if (e.target === riskScoreModal) {
+    riskScoreModal.classList.remove('open');
+  }
+});
+
+// ===== AI CHATBOT FUNCTIONALITY =====
+const chatbotToggle = document.getElementById('chatbotToggle');
+const chatbotWindow = document.getElementById('chatbotWindow');
+const chatbotClose = document.getElementById('chatbotClose');
+const chatbotInput = document.getElementById('chatbotInput');
+const chatbotSend = document.getElementById('chatbotSend');
+const chatbotMessages = document.getElementById('chatbotMessages');
+
+let chatHistory = [];
+
+// Toggle chatbot window
+chatbotToggle.addEventListener('click', () => {
+  chatbotWindow.classList.toggle('open');
+  if (chatbotWindow.classList.contains('open')) {
+    chatbotInput.focus();
+  }
+});
+
+chatbotClose.addEventListener('click', () => {
+  chatbotWindow.classList.remove('open');
+});
+
+// Add message to chat
+function addChatMessage(content, isUser = false) {
+  const messageDiv = document.createElement('div');
+  messageDiv.className = `chatbot-message ${isUser ? 'user' : 'bot'}`;
+  
+  const contentDiv = document.createElement('div');
+  contentDiv.className = 'chatbot-message-content';
+  
+  // Format content with proper spacing and line breaks
+  const formattedContent = content
+    .replace(/\n\n/g, '\n')
+    .split('\n')
+    .map(line => line.trim())
+    .join('\n')
+    .trim();
+  
+  // Create content with special styling for headers
+  // Handle decorative headers using either "─" or "===" patterns
+  const hasLineHeader = formattedContent.includes('─') || /\n?={3}.*?={3}\n?/g.test(formattedContent);
+  if (hasLineHeader) {
+    // Normalize any === SECTION === to ━━━ SECTION ━━━ for consistent styling
+    const normalized = formattedContent.replace(/\n?={3}\s*(.*?)\s*={3}\n?/g, (m, p1) => `\n━━━ ${p1.toUpperCase()} ━━━\n`);
+    const parts = normalized.split(/(\n?─{3}.*?─{3}\n?|\n?━━━\s.*?\s━━━\n?)/g);
+    let styledHtml = '';
+    
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      if (/^\s*─{3}.*─{3}\s*$/.test(part) || /^\s*━━━\s.*\s━━━\s*$/.test(part)) {
+        // Header line
+        const header = part.replace(/[─━]/g, '').trim();
+        styledHtml += `<div style="color: #667eea; font-weight: 700; margin: 10px 0 8px 0; font-size: 13px; letter-spacing: 0.6px;">${header}</div>`;
+      } else if (part.trim()) {
+        styledHtml += `<div style="margin: 4px 0; white-space: pre-wrap;">${part.trim()}</div>`;
+      }
+    }
+    contentDiv.innerHTML = styledHtml;
+  } else {
+    contentDiv.textContent = formattedContent;
+  }
+  
+  messageDiv.appendChild(contentDiv);
+  chatbotMessages.appendChild(messageDiv);
+  
+  // Scroll to bottom
+  chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
+}
+
+// Show typing indicator
+function showTypingIndicator() {
+  const typingDiv = document.createElement('div');
+  typingDiv.className = 'chatbot-message bot';
+  typingDiv.id = 'typingIndicator';
+  
+  const indicator = document.createElement('div');
+  indicator.className = 'typing-indicator chatbot-message-content';
+  indicator.innerHTML = '<span></span><span></span><span></span>';
+  
+  typingDiv.appendChild(indicator);
+  chatbotMessages.appendChild(typingDiv);
+  chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
+}
+
+// Remove typing indicator
+function removeTypingIndicator() {
+  const indicator = document.getElementById('typingIndicator');
+  if (indicator) {
+    indicator.remove();
+  }
+}
+
+// Send message to chatbot
+async function sendChatMessage() {
+  const message = chatbotInput.value.trim();
+  if (!message) return;
+  
+  // Add user message
+  addChatMessage(message, true);
+  chatHistory.push({ role: 'user', content: message });
+  
+  // Clear input
+  chatbotInput.value = '';
+  
+  // Disable send button
+  chatbotSend.disabled = true;
+  chatbotInput.disabled = true;
+  
+  // Show typing indicator
+  showTypingIndicator();
+  
+  try {
+    const timeRange = document.getElementById('timeRange')?.value || '24h';
+    
+    const response = await fetch('/api/chatbot', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        message: message,
+        time_range: timeRange,
+        history: chatHistory.slice(-10)  // Last 10 messages for context
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error('Chatbot request failed');
+    }
+    
+    const data = await response.json();
+    
+    // Remove typing indicator
+    removeTypingIndicator();
+    
+    // Add bot response
+    addChatMessage(data.response, false);
+    chatHistory.push({ role: 'assistant', content: data.response });
+    
+  } catch (error) {
+    console.error('Chatbot error:', error);
+    removeTypingIndicator();
+    addChatMessage('Sorry, I encountered an error. Please try again.', false);
+  } finally {
+    // Re-enable send button
+    chatbotSend.disabled = false;
+    chatbotInput.disabled = false;
+    chatbotInput.focus();
+  }
+}
+
+// Event listeners for sending messages
+chatbotSend.addEventListener('click', sendChatMessage);
+chatbotInput.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') {
+    sendChatMessage();
+  }
+});
+
+// Suggested questions
+const suggestedQuestions = [
+  "What's the total transaction count?",
+  "Show me high-risk transactions",
+  "What are the current trends?",
+  "Tell me about blocked transactions",
+  "Who are the most active users?"
+];
+
+// You could add quick action buttons here if desired
+// (Not implementing to keep it clean, but easy to add)
+
+</script>
+</body>
+</html>

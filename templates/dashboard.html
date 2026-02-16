@@ -1,0 +1,900 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>UPI Fraud Detection Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/dashboard.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+    
+    /* Rose Chart (Polar Area) hover glow effect */
+    #riskPie {
+      filter: drop-shadow(0 0 8px rgba(34, 197, 94, 0.15));
+      transition: filter 0.3s ease;
+    }
+    #riskPie:hover {
+      filter: drop-shadow(0 0 20px rgba(139, 92, 246, 0.4));
+    }
+    
+    /* Dashboard Button Shine Effect */
+    button, a[class*="bg-gradient"] {
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    button::before, a[class*="bg-gradient"]::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+      transition: left 0.5s ease;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    button:hover::before, a[class*="bg-gradient"]:hover::before {
+      left: 100%;
+    }
+
+    button:hover, a[class*="bg-gradient"]:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    }
+
+    /* Card Shine Effect - Stat Cards & Metric Cards */
+    .card.accent-border, [class*="bg-gradient-to-br"][class*="from-"] {
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .card.accent-border::before, [class*="bg-gradient-to-br"][class*="from-"]::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+      transition: left 0.6s ease;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    .card.accent-border:hover::before, [class*="bg-gradient-to-br"][class*="from-"]:hover::before {
+      left: 100%;
+    }
+
+    .card.accent-border:hover, [class*="bg-gradient-to-br"][class*="from-"]:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+    }
+
+    /* Dark mode adjustments for cards */
+    body.dark-mode .card.accent-border, body.dark-mode [class*="bg-gradient-to-br"][class*="from-"] {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+
+    body.dark-mode .card.accent-border::before, body.dark-mode [class*="bg-gradient-to-br"][class*="from-"]::before {
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+    }
+
+    body.dark-mode .card.accent-border:hover, body.dark-mode [class*="bg-gradient-to-br"][class*="from-"]:hover {
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    }
+  </style>
+</head>
+
+<body class="py-6">
+  <div class="max-w-6xl mx-auto px-4">
+
+    <!-- Header -->
+    <div class="card mb-6">
+      <div class="flex items-center justify-between flex-wrap gap-4">
+        <div>
+          <h1 class="text-3xl md:text-4xl font-extrabold bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent leading-tight">
+            UPI Fraud Detection System
+          </h1>
+          <p class="text-gray-600 small-text mt-1">Real-time monitoring • Activity Dashboard(view) • FDT2 </p>
+        </div>
+        <div class="flex gap-3 items-center flex-wrap">
+        <select id="timeRange" class="px-3 py-2 pr-8 border rounded-lg bg-white small-text">
+          <option value="1h">Last Hour</option>
+          <option value="24h" selected>Last 24 Hours</option>
+          <option value="7d">Last 7 Days</option>
+          <option value="30d">Last 30 Days</option>
+        </select>
+
+        <button id="infoBtn" class="px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg small-text hover:shadow-lg transition-all" title="Risk Score Info">
+          ℹ️ Risk Score
+        </button>
+
+        <button id="exportBtn" class="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg small-text flex items-center gap-2">
+          <span class="export-btn-text">📥 Export</span>
+          <span class="export-loading" style="display:none;"><svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></span>
+        </button>
+
+        <!-- Dark Mode Toggle Button -->
+        <button id="darkModeToggle" class="px-4 py-2 bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-lg small-text hover:shadow-lg transition-all" title="Toggle Dark Mode">
+          🌙 Dark
+        </button>
+
+        <!-- ADMIN LOGIN BUTTON ADDED (redirects to admin login) -->
+        <a id="adminLoginBtn" href="/admin/login" class="px-4 py-2 bg-gradient-to-r from-orange-600 to-red-600 text-white rounded-lg small-text hover:shadow-lg transition-all">Admin Login</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div class="card accent-border" style="border-color:#6366F1">
+        <p class="text-gray-600 small-text">Total Transactions</p>
+        <h2 id="totalTx" class="text-2xl stat-value text-[#6366F1]">0</h2>
+        <p class="text-xs text-gray-500">Last 24 hours</p>
+      </div>
+
+      <div class="card accent-border" style="border-color:#EF4444">
+        <p class="text-gray-600 small-text">Blocked</p>
+        <h2 id="blockedTx" class="text-2xl stat-value text-[#EF4444]">0</h2>
+        <p class="text-xs text-gray-500">Requires review</p>
+      </div>
+
+      <div class="card accent-border" style="border-color:#F59E0B">
+        <p class="text-gray-600 small-text">Delayed</p>
+        <h2 id="delayedTx" class="text-2xl stat-value text-[#F59E0B]">0</h2>
+        <p class="text-xs text-gray-500">Pending verification</p>
+      </div>
+
+      <div class="card accent-border" style="border-color:#10B981">
+        <p class="text-gray-600 small-text">Allowed</p>
+        <h2 id="allowedTx" class="text-2xl stat-value text-[#10B981]">0</h2>
+        <p class="text-xs text-gray-500">Cleared</p>
+      </div>
+    </div>
+
+    <!-- Charts + table grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+      <div class="lg:col-span-2 card">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-lg font-bold">Transaction Activity Timeline</h3>
+          <div class="text-sm text-gray-500">Real-time</div>
+        </div>
+        <div class="chart-wrap" id="timelineChartWrapper">
+          <canvas id="timelineChart" style="height:220px;width:100%"></canvas>
+          <div class="chart-loading-overlay" id="timelineLoadingOverlay" style="display:none;">
+            <div class="chart-loading-spinner">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            </div>
+            <p class="chart-loading-text">Loading chart data...</p>
+          </div>
+          <div class="chart-no-data-overlay" id="timelineNoDataOverlay" style="display:none;">
+            <p class="chart-no-data-text">No data available</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="flex items-center gap-2 mb-3">
+          <h3 class="text-lg font-bold mb-0 leading-none flex items-center">Risk Distribution</h3>
+          <button id="riskDistInfoBtn" class="w-6 h-6 inline-flex items-center justify-center align-middle rounded-full bg-blue-500 text-white cursor-pointer text-[11px] font-bold leading-none hover:bg-blue-600 transition-colors" title="Info">
+            ℹ️
+          </button>
+        </div>
+        <div class="chart-wrap" id="riskPieWrapper">
+          <canvas id="riskPie" style="height:220px;width:100%;background:transparent;"></canvas>
+          <div class="chart-loading-overlay" id="riskPieLoadingOverlay" style="display:none;">
+            <div class="chart-loading-spinner">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            </div>
+            <p class="chart-loading-text">Loading chart data...</p>
+          </div>
+          <div class="chart-no-data-overlay" id="riskPieNoDataOverlay" style="display:none;">
+            <p class="chart-no-data-text">No data available</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+      <div class="card">
+        <div class="flex items-center gap-2 mb-3">
+          <h3 class="text-lg font-bold mb-0 leading-none flex items-center">ML Pipeline Contribution</h3>
+          <button id="fraudPatternInfoBtn" class="w-6 h-6 inline-flex items-center justify-center align-middle rounded-full bg-blue-500 text-white cursor-pointer text-[11px] font-bold leading-none hover:bg-blue-600 transition-colors" title="Info">
+            ℹ️
+          </button>
+        </div>
+        <div class="chart-wrap" id="fraudBarWrapper">
+          <canvas id="fraudBar" style="height:250px;width:100%"></canvas>
+          <p id="mlPipelineSummary" class="text-xs text-center text-gray-500 mt-1">0/5 systems active | 0 transactions analyzed</p>
+          <div class="chart-loading-overlay" id="fraudBarLoadingOverlay" style="display:none;">
+            <div class="chart-loading-spinner">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            </div>
+            <p class="chart-loading-text">Loading chart data...</p>
+          </div>
+          <div class="chart-no-data-overlay" id="fraudBarNoDataOverlay" style="display:none;">
+            <p class="chart-no-data-text">No data available</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card flex flex-col">
+        <div class="flex items-center gap-2 mb-3">
+          <h3 class="text-lg font-bold mb-0 leading-none flex items-center">Recent High-Risk Alerts</h3>
+          <div class="relative group inline-flex items-center">
+            <button class="w-6 h-6 inline-flex items-center justify-center align-middle rounded-full bg-blue-500 text-white cursor-help text-[11px] font-bold leading-none hover:bg-blue-600 transition-colors" title="Info">
+              ℹ️
+            </button>
+            <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 p-2 bg-gray-900 dark:bg-gray-800 text-white dark:text-gray-100 text-xs rounded-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-200 z-50 whitespace-normal text-center">
+              Transactions with risk score greater than 0.80 are flagged as high-risk and require immediate attention.
+            </div>
+          </div>
+        </div>
+        <div id="alertsList" class="space-y-2 h-[525px] overflow-y-auto small-text text-gray-700 w-full" style="scroll-behavior: smooth;">
+          <div class="text-gray-500">No high-risk transactions</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Transactions Table -->
+    <div class="card">
+      <div class="flex items-center justify-between mb-3 flex-wrap gap-3">
+        <h3 class="text-lg font-bold">Recent Transactions</h3>
+        <select id="txFilter" class="px-3 py-1 pr-8 border rounded-lg bg-white small-text">
+          <option value="ALL">All</option>
+          <option value="ALLOW">Allowed</option>
+          <option value="DELAY">Delayed</option>
+          <option value="BLOCK">Blocked</option>
+        </select>
+      </div>
+
+      <div class="table-scroll">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b">
+              <th class="px-3 py-2 text-left">
+                Time <span class="sort-arrow" data-column="time" onclick="sortTable('time')"></span>
+              </th>
+              <th class="px-3 py-2 text-left">TX ID</th>
+              <th class="px-3 py-2 text-left">
+                User <span class="sort-arrow" data-column="user" onclick="sortTable('user')"></span>
+              </th>
+              <th class="px-3 py-2 text-left">
+                Amount <span class="sort-arrow" data-column="amount" onclick="sortTable('amount')"></span>
+              </th>
+              <th class="px-3 py-2 text-left">
+                Type <span class="sort-arrow" data-column="type" onclick="sortTable('type')"></span>
+              </th>
+              <th class="px-3 py-2 text-left">
+                Channel <span class="sort-arrow" data-column="channel" onclick="sortTable('channel')"></span>
+              </th>
+              <th class="px-3 py-2 text-left">
+                Risk <span class="sort-arrow" data-column="risk" onclick="sortTable('risk')"></span>
+              </th>
+              <th class="px-3 py-2 text-left">
+                Confidence <span class="sort-arrow" data-column="confidence" onclick="sortTable('confidence')"></span>
+              </th>
+            </tr>
+          </thead>
+          <tbody id="txTbody">
+            <tr id="loadingPlaceholder">
+              <td colspan="8" class="text-center py-8 text-gray-500">
+                <div class="inline-flex items-center gap-2">
+                  <div class="animate-spin inline-block w-5 h-5 border-2 border-current border-t-transparent rounded-full"></div>
+                  <span>Loading transactions...</span>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      
+      <!-- Pro Tip -->
+      <div class="mt-4 p-3 bg-blue-50 border-l-4 border-blue-500 rounded-lg">
+        <div class="flex items-start gap-2">
+          <span class="text-blue-600 text-lg font-bold">💡</span>
+          <div>
+            <p class="text-sm font-semibold text-blue-900">Pro Tip</p>
+            <p class="text-xs text-blue-800 mt-1">Need complete transaction data? Click the <span class="font-bold">Export</span> button at the top to download all transactions in CSV format for detailed analysis.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Model Accuracy Section -->
+    <div class="card mt-6">
+      <div class="flex items-center gap-2 mb-4">
+        <h3 class="text-lg font-bold mb-0 leading-none flex items-center">Model Performance Metrics</h3>
+        <button id="modelMetricsInfoBtn" class="w-6 h-6 inline-flex items-center justify-center align-middle rounded-full bg-blue-500 text-white cursor-pointer text-[11px] font-bold leading-none hover:bg-blue-600 transition-colors" title="Info">
+          ℹ️
+        </button>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="p-4 rounded-lg bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-semibold text-purple-700">Random Forest</span>
+            <span class="text-xs text-purple-600">🌲</span>
+          </div>
+          <div class="text-2xl font-bold text-purple-900" id="rfAccuracy">--</div>
+          <div class="text-xs text-purple-600 mt-1">Accuracy</div>
+        </div>
+        
+        <div class="p-4 rounded-lg bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-semibold text-blue-700">XGBoost</span>
+            <span class="text-xs text-blue-600">⚡</span>
+          </div>
+          <div class="text-2xl font-bold text-blue-900" id="xgbAccuracy">--</div>
+          <div class="text-xs text-blue-600 mt-1">Accuracy</div>
+        </div>
+        
+        <div class="p-4 rounded-lg bg-gradient-to-br from-green-50 to-green-100 border border-green-200">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-semibold text-green-700">Isolation Forest</span>
+            <span class="text-xs text-green-600">🌳</span>
+          </div>
+          <div class="text-2xl font-bold text-green-900" id="iforestAccuracy">--</div>
+          <div class="text-xs text-green-600 mt-1">Detection Rate</div>
+        </div>
+        
+        <div class="p-4 rounded-lg bg-gradient-to-br from-indigo-50 to-indigo-100 border border-indigo-300">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-semibold text-indigo-700">Ensemble Average</span>
+            <span class="text-xs text-indigo-600">🎯</span>
+          </div>
+          <div class="text-2xl font-bold text-indigo-900" id="ensembleAccuracy">--</div>
+          <div class="text-xs text-indigo-600 mt-1">Overall Accuracy</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Risk Score Info Modal -->
+  <div id="riskScoreModal" class="modal-overlay">
+    <div class="info-modal">
+      <div class="info-modal-header">
+        <h2>Risk Score Guide</h2>
+        <button id="closeModal" class="close-btn text-2xl leading-none">&times;</button>
+      </div>
+      
+      <div class="info-modal-content">
+        <div class="info-section">
+          <h3>📊 What is Risk Score?</h3>
+          <p>Risk score is a numerical value (0.00 to 1.00) that indicates the likelihood of a transaction being fraudulent. Our AI-powered system analyzes multiple factors in real-time to calculate this score.</p>
+        </div>
+
+        <div class="info-section">
+          <h3>🎯 Risk Thresholds</h3>
+          <div class="risk-threshold">
+            <div class="threshold-card low-risk">
+              <div class="emoji">✅</div>
+              <div class="label">LOW RISK</div>
+              <div class="value">0.00 - 0.29</div>
+              <div class="desc">Safe to proceed</div>
+            </div>
+            <div class="threshold-card medium-risk">
+              <div class="emoji">⚠️</div>
+              <div class="label">MEDIUM RISK</div>
+              <div class="value">0.30 - 0.59</div>
+              <div class="desc">Monitor closely</div>
+            </div>
+            <div class="threshold-card high-risk">
+              <div class="emoji">🚫</div>
+              <div class="label">HIGH RISK</div>
+              <div class="value">0.60 - 1.00</div>
+              <div class="desc">Requires review</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="info-section">
+          <h3>🔍 Factors Analyzed</h3>
+          <div class="risk-factors">
+            <ul>
+              <li><strong>Transaction Amount:</strong> Unusual amounts compared to user history</li>
+              <li><strong>Behavioral Patterns:</strong> Deviations from normal spending habits</li>
+              <li><strong>Device Information:</strong> New or suspicious device usage</li>
+              <li><strong>Velocity Checks:</strong> Rapid succession of transactions</li>
+              <li><strong>Historical Data:</strong> Past fraud patterns and user behavior</li>
+              <li><strong>Model Consensus:</strong> Agreement across multiple AI models</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="info-section">
+          <h3>⚡ Real-Time Detection</h3>
+          <p>Our system processes transactions in milliseconds using ensemble machine learning models (Isolation Forest, Random Forest, XGBoost) to provide accurate risk assessments.</p>
+        </div>
+
+        <div class="info-highlight">
+          <strong>💡 Pro Tip:</strong> Transactions with risk scores above 0.80 are automatically flagged for manual review to prevent potential fraud.
+        </div>
+
+        <div class="info-tip">
+          <strong>🛡️ Security Note:</strong> All transaction data is encrypted and processed in compliance with banking security standards.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ML Pipeline Contribution Modal -->
+  <div id="fraudPatternModal" class="modal-overlay">
+    <div class="info-modal">
+      <div class="info-modal-header">
+        <h2>🧠 ML Pipeline Contribution</h2>
+        <button id="closeFraudPatternModal" class="close-btn text-2xl leading-none">&times;</button>
+      </div>
+      
+      <div class="info-modal-content">
+        <div class="info-section">
+          <h3>🎯 What is ML Pipeline Contribution?</h3>
+          <p>This chart shows how our 5 advanced ML systems contribute to fraud detection. Each system adds a layer of protection, working together to identify suspicious transactions with high accuracy.</p>
+        </div>
+
+        <div class="info-section">
+          <h3>🔬 The 5 ML Systems</h3>
+          <div class="risk-factors">
+            <ul>
+              <li><strong>🛡️ Trust Engine:</strong> Builds trust gradually through repeated successful transactions with recipients</li>
+              <li><strong>⚠️ Risk Buffer:</strong> Cumulative risk accumulator that prevents "slow-burn" fraud attacks</li>
+              <li><strong>🎯 Dynamic Thresholds:</strong> Personalized limits that adapt to user behavior patterns</li>
+              <li><strong>📊 Drift Detection:</strong> Monitors feature distribution changes to detect model degradation</li>
+              <li><strong>🕸️ Graph Signals:</strong> Network analysis to catch fraud rings and suspicious connections</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="info-section">
+          <h3>⚡ How It Works</h3>
+          <p>Each transaction flows through all 5 ML systems. The systems analyze trust scores, risk buffers, dynamic thresholds, data drift, and network relationships to make intelligent fraud detection decisions.</p>
+        </div>
+
+        <div class="info-highlight">
+          <strong>💡 Pro Tip:</strong> Multiple ML systems triggering simultaneously indicates higher fraud risk. Review transactions with 3 or more active triggers carefully.
+        </div>
+
+        <div class="info-tip">
+          <strong>🛡️ Security Note:</strong> Pattern analysis is continuously updated with new fraud trends to stay ahead of evolving threats.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Model Performance Metrics Modal -->
+  <div id="modelMetricsModal" class="modal-overlay">
+    <div class="info-modal">
+      <div class="info-modal-header">
+        <h2>Model Performance Metrics</h2>
+        <button id="closeModelMetricsModal" class="close-btn text-2xl leading-none">&times;</button>
+      </div>
+      
+      <div class="info-modal-content">
+        <div class="info-section">
+          <h3>🤖 What are Model Performance Metrics?</h3>
+          <p>Our fraud detection system uses an ensemble of three powerful machine learning models working together. These metrics show how accurately each model identifies fraudulent transactions.</p>
+        </div>
+
+        <div class="info-section">
+          <h3>🧠 The Models</h3>
+          <div class="risk-factors">
+            <ul>
+              <li><strong>Random Forest (🌲):</strong> Uses multiple decision trees to vote on fraud likelihood. Excellent at capturing complex patterns in transaction behavior.</li>
+              <li><strong>XGBoost (⚡):</strong> Advanced gradient boosting algorithm that learns from errors. Highly accurate for structured transaction data.</li>
+              <li><strong>Isolation Forest (🌳):</strong> Specialized in anomaly detection. Identifies transactions that deviate from normal patterns.</li>
+              <li><strong>Ensemble Average (🎯):</strong> Combined score from all models. Uses wisdom of the crowd for final decision.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="info-section">
+          <h3>📊 Understanding Accuracy</h3>
+          <p><strong>Accuracy Percentage:</strong> Shows what percentage of transactions the model correctly classifies as fraud or legitimate.</p>
+          <p class="mt-2"><strong>Example:</strong> 97.21% accuracy means the model correctly identifies 9,721 out of 10,000 transactions.</p>
+        </div>
+
+        <div class="info-section">
+          <h3>🎯 Why Ensemble Matters</h3>
+          <p>Using multiple models together (ensemble) reduces false positives and catches sophisticated fraud that single models might miss. Each model contributes its unique strength to the final decision.</p>
+        </div>
+
+        <div class="info-section">
+          <h3>♻️ Automatic Updates</h3>
+          <p>These metrics automatically update whenever models are retrained with new transaction data, ensuring accuracy reflects current performance.</p>
+        </div>
+
+        <div class="info-highlight">
+          <strong>💡 Pro Tip:</strong> Model accuracy above 95% indicates excellent fraud detection capability. Regular retraining keeps models sharp.
+        </div>
+
+        <div class="info-tip">
+          <strong>🛡️ Security Note:</strong> All models are trained on encrypted data and validated using industry-standard cross-validation techniques.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Risk Distribution Modal -->
+  <div id="riskDistModal" class="modal-overlay">
+    <div class="info-modal">
+      <div class="info-modal-header">
+        <h2>Risk Distribution Overview</h2>
+        <button id="closeRiskDistModal" class="close-btn text-2xl leading-none">&times;</button>
+      </div>
+      
+      <div class="info-modal-content">
+        <div class="info-section">
+          <h3>📊 Understanding Risk Distribution</h3>
+          <p>This chart shows the distribution of transactions across different risk categories, helping you visualize the overall security health of your transaction volume.</p>
+        </div>
+
+        <div class="info-section">
+          <h3>🎯 Risk Categories</h3>
+          <div class="risk-threshold">
+            <div class="threshold-card low-risk">
+              <div class="emoji">✅</div>
+              <div class="label">LOW RISK</div>
+              <div class="value">0.00 - 0.29</div>
+              <div class="desc">Normal transactions</div>
+            </div>
+            <div class="threshold-card medium-risk">
+              <div class="emoji">⚠️</div>
+              <div class="label">MEDIUM RISK</div>
+              <div class="value">0.30 - 0.59</div>
+              <div class="desc">Requires monitoring</div>
+            </div>
+            <div class="threshold-card high-risk">
+              <div class="emoji">🚫</div>
+              <div class="label">HIGH RISK</div>
+              <div class="value">0.60 - 1.00</div>
+              <div class="desc">Suspicious activity</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="info-section">
+          <h3>📈 Healthy Distribution</h3>
+          <p><strong>Ideal Pattern:</strong> Most transactions (85-95%) should be in the Low Risk category, with Medium Risk around 5-10%, and High Risk below 5%.</p>
+          <p class="mt-2"><strong>Alert:</strong> If High Risk transactions exceed 10%, immediate investigation is recommended.</p>
+        </div>
+
+        <div class="info-section">
+          <h3>⚡ Real-Time Updates</h3>
+          <p>The distribution chart updates automatically as new transactions are processed, providing instant visibility into risk trends.</p>
+        </div>
+
+        <div class="info-highlight">
+          <strong>💡 Pro Tip:</strong> Sudden spikes in Medium or High Risk categories often indicate coordinated fraud attacks.
+        </div>
+
+        <div class="info-tip">
+          <strong>🛡️ Security Note:</strong> All risk calculations use ensemble ML models for maximum accuracy.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Export Options Modal -->
+  <div id="exportModal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header export-header">
+        <h2>Export Transactions</h2>
+        <button class="modal-close" onclick="document.getElementById('exportModal').style.display='none'">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Time Range</label>
+          <div class="select-wrapper">
+            <select id="exportTimeRange" class="form-control export-select">
+              <option value="24h">Last 24 Hours</option>
+              <option value="7d">Last 7 Days</option>
+              <option value="30d">Last 30 Days</option>
+              <option value="90d">Last 90 Days</option>
+              <option value="custom">Custom Date Range</option>
+            </select>
+            <span class="select-arrow">▼</span>
+          </div>
+        </div>
+
+        <div id="customDateRange" style="display: none;" class="form-group">
+          <label>From Date</label>
+          <input type="datetime-local" id="exportStartDate" class="form-control">
+          <label style="margin-top: 10px;">To Date</label>
+          <input type="datetime-local" id="exportEndDate" class="form-control">
+        </div>
+
+        <div class="form-group">
+          <label>File Format</label>
+          <div class="select-wrapper">
+            <select id="exportFormat" class="form-control export-select">
+              <option value="csv">CSV (Excel)</option>
+              <option value="json">JSON (Structured)</option>
+              <option value="txt">TXT (Delimited)</option>
+              <option value="xlsx">XLSX (Excel Workbook)</option>
+            </select>
+            <span class="select-arrow">▼</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="document.getElementById('exportModal').style.display='none'">Cancel</button>
+        <button id="exportSubmitBtn" class="btn-primary" onclick="performExport()">
+          <span class="export-submit-text">📥 Export</span>
+          <span class="export-submit-loading" style="display:none;">
+            <svg class="export-spinner" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            Exporting...
+          </span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chatbot Toggle Button -->
+  <button id="chatbotToggle" class="chatbot-toggle" title="Ask AI Assistant">
+    💬
+  </button>
+
+  <!-- Chatbot Window -->
+  <div id="chatbotWindow" class="chatbot-window">
+    <div class="chatbot-header">
+      <div class="flex items-center gap-2">
+        <div class="chatbot-avatar">🤖</div>
+        <div>
+          <div class="font-semibold">SYNARA AI</div>
+          <div class="text-xs opacity-75">Ask me anything about your transactions</div>
+        </div>
+      </div>
+      <button id="chatbotClose" class="text-2xl leading-none hover:opacity-75">&times;</button>
+    </div>
+    
+    <div id="chatbotMessages" class="chatbot-messages">
+      <div class="chatbot-message bot">
+        <div class="chatbot-message-content">
+          Hello! I'm Synara your fraud detection assistant. Ask me about transaction patterns, risk scores, or any suspicious activities.
+        </div>
+      </div>
+    </div>
+    
+    <div class="chatbot-input-container">
+      <input 
+        type="text" 
+        id="chatbotInput" 
+        class="chatbot-input" 
+        placeholder="Ask about transactions, patterns, risk scores..."
+      />
+      <button id="chatbotSend" class="chatbot-send-btn">Send</button>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toastContainer" style="position: fixed; bottom: 110px; right: 32px; z-index: 9998; display: flex; flex-direction: column-reverse; gap: 12px; pointer-events: none;"></div>
+
+  <style>
+    /* Custom Scrollbar for Alerts List */
+    #alertsList::-webkit-scrollbar {
+      width: 6px;
+    }
+    #alertsList::-webkit-scrollbar-track {
+      background: rgba(75, 85, 99, 0.1);
+      border-radius: 3px;
+    }
+    #alertsList::-webkit-scrollbar-thumb {
+      background: rgba(107, 114, 128, 0.5);
+      border-radius: 3px;
+    }
+    #alertsList::-webkit-scrollbar-thumb:hover {
+      background: rgba(107, 114, 128, 0.8);
+    }
+    /* Firefox scrollbar */
+    #alertsList {
+      scrollbar-width: thin;
+      scrollbar-color: rgba(107, 114, 128, 0.5) rgba(75, 85, 99, 0.1);
+    }
+
+    /* Toast Notifications */
+    .toast {
+      pointer-events: auto;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+      padding: 16px;
+      min-width: 320px;
+      max-width: 420px;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      position: relative;
+      overflow: hidden;
+      transform: translateX(400px);
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    }
+    
+    /* Dark mode support for toasts */
+    body.dark-mode .toast {
+      background: #1e293b;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    }
+    
+    body.dark-mode .toast__title {
+      color: #e5e7eb;
+    }
+    
+    body.dark-mode .toast__message {
+      color: #cbd5e1;
+    }
+    
+    body.dark-mode .toast__close {
+      color: #64748b;
+    }
+    
+    body.dark-mode .toast__close:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #e5e7eb;
+    }
+    
+    .toast.show { transform: translateX(0); opacity: 1; }
+    .toast.hide { opacity: 0; transform: translateX(8px); }
+    
+    .toast__icon { width: 44px; height: 44px; flex: 0 0 44px; display: flex; align-items: center; justify-content: center; border-radius: 8px; font-size: 18px; }
+    .toast__content { flex: 1 1 auto; min-width: 0; }
+    .toast__title { font-weight: 700; font-size: 13px; color: #0f172a; margin-bottom: 4px; }
+    .toast__message { font-weight: 500; color: #475569; font-size: 13px; line-height: 1.4; word-break: break-word; }
+    .toast__close { margin-left: 8px; background: transparent; border: 0; color: #94a3b8; cursor: pointer; padding: 6px; border-radius: 6px; font-size: 20px; line-height: 1; }
+    .toast__close:hover { background: rgba(15, 23, 42, 0.04); color: #0f172a; }
+    .toast__progress { position: absolute; left: 0; bottom: 0; height: 3px; background: linear-gradient(90deg, #60a5fa, #3b82f6); width: 100%; transform-origin: left center; transform: scaleX(1); transition: transform linear; }
+    
+    .toast--success .toast__icon { background: linear-gradient(135deg, #ecfdf5, #bbf7d0); color: #065f46; }
+    .toast--error .toast__icon { background: linear-gradient(135deg, #fff1f2, #fecaca); color: #7f1d1d; }
+    .toast--info .toast__icon { background: linear-gradient(135deg, #eff6ff, #bfdbfe); color: #1e3a8a; }
+    .toast--warning .toast__icon { background: linear-gradient(135deg, #fefce8, #fde047); color: #713f12; }
+
+    /* Footer Styles */
+    .footer {
+      margin-top: 60px;
+      padding: 32px 0;
+      border-top: 1px solid #e5e7eb;
+      background: linear-gradient(to bottom, transparent, rgba(0, 0, 0, 0.02));
+    }
+
+    body.dark-mode .footer {
+      border-top-color: #334155;
+      background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.02));
+    }
+
+    .footer-content {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      align-items: center;
+      text-align: center;
+    }
+
+    .footer-social {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .footer-social a {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #f3f4f6, #e5e7eb);
+      color: #4b5563;
+      text-decoration: none;
+      font-size: 18px;
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .footer-social a::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+      transition: left 0.5s ease;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    .footer-social a:hover::before {
+      left: 100%;
+    }
+
+    .footer-social a:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+    }
+
+    .footer-social a.email { background: linear-gradient(135deg, #fee2e2, #fecaca); color: #991b1b; }
+    .footer-social a.github { background: linear-gradient(135deg, #f3f4f6, #e5e7eb); color: #1f2937; }
+    .footer-social a.linkedin { background: linear-gradient(135deg, #dbeafe, #bfdbfe); color: #1e40af; }
+    .footer-social a.twitter { background: linear-gradient(135deg, #dbeafe, #93c5fd); color: #1d4ed8; }
+    .footer-social a.website { background: linear-gradient(135deg, #e0e7ff, #c7d2fe); color: #4338ca; }
+
+    body.dark-mode .footer-social a {
+      background: linear-gradient(135deg, #334155, #475569);
+      color: #cbd5e1;
+    }
+
+    body.dark-mode .footer-social a.email { background: linear-gradient(135deg, #7f1d1d, #991b1b); color: #fecaca; }
+    body.dark-mode .footer-social a.github { background: linear-gradient(135deg, #1f2937, #374151); color: #f3f4f6; }
+    body.dark-mode .footer-social a.linkedin { background: linear-gradient(135deg, #1e40af, #2563eb); color: #dbeafe; }
+    body.dark-mode .footer-social a.twitter { background: linear-gradient(135deg, #1e3a8a, #1d4ed8); color: #bfdbfe; }
+    body.dark-mode .footer-social a.website { background: linear-gradient(135deg, #4338ca, #6366f1); color: #e0e7ff; }
+
+    .footer-copyright {
+      color: #6b7280;
+      font-size: 14px;
+    }
+
+    body.dark-mode .footer-copyright {
+      color: #9ca3af;
+    }
+
+    .footer-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 8px;
+    }
+
+    body.dark-mode .footer-title {
+      color: #e5e7eb;
+    }
+  </style>
+
+  <script src="/static/dashboard.js"></script>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="max-w-6xl mx-auto px-4">
+      <div class="footer-content">
+        <div>
+          <h3 class="footer-title">Connect With Us</h3>
+          <div class="footer-social">
+            <a href="mailto:teamfdt2@gmail.com" class="email" title="Email" aria-label="Email">
+              📧
+            </a>
+            <a href="https://github.com/JEROLD-creator653" target="_blank" rel="noopener noreferrer" class="github" title="GitHub" aria-label="GitHub">
+              <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+            </a>
+            <a href="https://linkedin.com/in/jerold-christoper-g-992052327" target="_blank" rel="noopener noreferrer" class="linkedin" title="LinkedIn" aria-label="LinkedIn">
+              <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+            </a>
+            <a href="https://twitter.com/yourhandle" target="_blank" rel="noopener noreferrer" class="twitter" title="Twitter" aria-label="Twitter">
+              <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M23.953 4.57a10 10 0 01-2.825.775 4.958 4.958 0 002.163-2.723c-.951.555-2.005.959-3.127 1.184a4.92 4.92 0 00-8.384 4.482C7.69 8.095 4.067 6.13 1.64 3.162a4.822 4.822 0 00-.666 2.475c0 1.71.87 3.213 2.188 4.096a4.904 4.904 0 01-2.228-.616v.06a4.923 4.923 0 003.946 4.827 4.996 4.996 0 01-2.212.085 4.936 4.936 0 004.604 3.417 9.867 9.867 0 01-6.102 2.105c-.39 0-.779-.023-1.17-.067a13.995 13.995 0 007.557 2.209c9.053 0 13.998-7.496 13.998-13.985 0-.21 0-.42-.015-.63A9.935 9.935 0 0024 4.59z"/></svg>
+            </a>
+            <a href="https://yourwebsite.com" target="_blank" rel="noopener noreferrer" class="website" title="Website" aria-label="Website">
+              🌐
+            </a>
+          </div>
+        </div>
+        <div class="footer-copyright">
+          © 2026 UPI Fraud Detection System | All rights reserved | Powered by FDT2
+        </div>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>

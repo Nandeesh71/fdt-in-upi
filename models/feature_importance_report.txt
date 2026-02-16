@@ -1,0 +1,89 @@
+================================================================================
+FEATURE IMPORTANCE ANALYSIS REPORT
+================================================================================
+
+Total Features: 25
+
+================================================================================
+
+
+RANDOM FOREST - TOP 15 FEATURES
+--------------------------------------------------------------------------------
+Rank   Feature                        Importance     
+--------------------------------------------------------------------------------
+1      amount_std                     0.207408       
+2      amount                         0.185203       
+3      amount_max                     0.184688       
+4      log_amount                     0.158118       
+5      amount_mean                    0.128467       
+6      hour_of_day                    0.025773       
+7      is_new_device                  0.021403       
+8      amount_deviation               0.016437       
+9      device_count                   0.016317       
+10     recipient_tx_count             0.016272       
+11     merchant_risk_score            0.013468       
+12     is_night                       0.007884       
+13     is_qr_channel                  0.005520       
+14     is_round_amount                0.004153       
+15     is_business_hours              0.002892       
+
+
+================================================================================
+XGBOOST - TOP 15 FEATURES
+--------------------------------------------------------------------------------
+Rank   Feature                        Importance     
+--------------------------------------------------------------------------------
+1      log_amount                     0.254801       
+2      amount                         0.236306       
+3      amount_std                     0.207267       
+4      is_round_amount                0.045878       
+5      merchant_risk_score            0.042182       
+6      amount_mean                    0.034255       
+7      is_night                       0.023961       
+8      is_qr_channel                  0.020726       
+9      is_new_device                  0.017736       
+10     hour_of_day                    0.017092       
+11     recipient_tx_count             0.014738       
+12     amount_deviation               0.014646       
+13     device_count                   0.014623       
+14     is_web_channel                 0.014279       
+15     is_business_hours              0.012463       
+
+
+================================================================================
+FEATURE IMPORTANCE BY CATEGORY
+================================================================================
+
+Basic Features:
+  Random Forest Avg:  0.115825
+  XGBoost Avg:        0.178995
+
+Temporal Features:
+  Random Forest Avg:  0.007733
+  XGBoost Avg:        0.012899
+
+Velocity Features:
+  Random Forest Avg:  0.000000
+  XGBoost Avg:        0.000000
+
+Behavioral Features:
+  Random Forest Avg:  0.011240
+  XGBoost Avg:        0.011299
+
+Statistical Features:
+  Random Forest Avg:  0.134250
+  XGBoost Avg:        0.066209
+
+Risk Features:
+  Random Forest Avg:  0.006887
+  XGBoost Avg:        0.025729
+
+
+================================================================================
+KEY INSIGHTS
+================================================================================
+
+Top 5 Features (Random Forest): amount_std, amount, amount_max, log_amount, amount_mean
+Top 5 Features (XGBoost): log_amount, amount, amount_std, is_round_amount, merchant_risk_score
+
+Features in both top 5: amount_std, log_amount, amount

@@ -1,0 +1,89 @@
+// Firebase configuration and initialization
+// Firebase is OPTIONAL - app works without it
+let app = null;
+let messaging = null;
+
+// Only initialize Firebase if explicitly enabled
+const FIREBASE_ENABLED = process.env.REACT_APP_FIREBASE_ENABLED === 'true';
+
+if (FIREBASE_ENABLED) {
+  try {
+    const { initializeApp } = require('firebase/app');
+    const { getMessaging } = require('firebase/messaging');
+    
+    const firebaseConfig = {
+      apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+      authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+      projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+      storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+      messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+      appId: process.env.REACT_APP_FIREBASE_APP_ID
+    };
+
+    app = initializeApp(firebaseConfig);
+    messaging = getMessaging(app);
+    console.log('✅ Firebase initialized successfully');
+  } catch (error) {
+    console.warn('⚠️ Firebase initialization failed:', error.message);
+    app = null;
+    messaging = null;
+  }
+} else {
+  console.log('ℹ️ Firebase disabled - running without push notifications');
+}
+
+/**
+ * Request notification permission and get FCM token
+ * Returns null if Firebase is disabled
+ */
+export const requestNotificationPermission = async () => {
+  if (!messaging) {
+    console.log('ℹ️ Push notifications disabled (Firebase not initialized)');
+    return null;
+  }
+  
+  try {
+    const { getToken } = require('firebase/messaging');
+    const permission = await Notification.requestPermission();
+    
+    if (permission === 'granted') {
+      const token = await getToken(messaging, {
+        vapidKey: process.env.REACT_APP_FIREBASE_VAPID_KEY
+      });
+      
+      console.log('✅ FCM Token obtained');
+      return token;
+    } else {
+      console.log('ℹ️ Notification permission denied');
+      return null;
+    }
+  } catch (error) {
+    console.warn('⚠️ Error getting FCM token:', error.message);
+    return null;
+  }
+};
+
+/**
+ * Listen for foreground messages
+ * Returns empty promise if Firebase is disabled
+ */
+export const onMessageListener = () =>
+  new Promise((resolve, reject) => {
+    if (!messaging) {
+      // Return empty promise that never resolves - no Firebase, no messages
+      return;
+    }
+    
+    try {
+      const { onMessage } = require('firebase/messaging');
+      onMessage(messaging, (payload) => {
+        console.log('📨 Message received:', payload);
+        resolve(payload);
+      });
+    } catch (error) {
+      console.warn('⚠️ Error setting up message listener:', error.message);
+      reject(error);
+    }
+  });
+
+export { messaging };

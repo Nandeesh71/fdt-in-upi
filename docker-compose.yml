@@ -1,0 +1,37 @@
+# Docker Compose for FDT Application
+# Enhanced version with healthchecks and auto-initialization
+# Original simple version available in: tools/docker-compose.yml
+
+services:
+  db:
+    image: postgres:14
+    container_name: fdt-postgres
+    environment:
+      POSTGRES_USER: fdt
+      POSTGRES_PASSWORD: fdtpass
+      POSTGRES_DB: fdt_db
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./backend/init_schema.sql:/docker-entrypoint-initdb.d/init_schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fdt"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:6
+    container_name: fdt-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  db-data:
