@@ -167,11 +167,7 @@ async def health_check():
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://fdt-frontend.onrender.com",   # ← your Render frontend URL
-        "http://localhost:3000",
-        "http://localhost:3001",
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
