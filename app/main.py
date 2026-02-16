@@ -1,4 +1,16 @@
 # app/main.py
+from fastapi import FastAPI
+
+app = FastAPI()
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for Render"""
+    return {
+        "status": "healthy",
+        "service": "fdt-backend"
+    }
+    
 import os
 import yaml
 import json
