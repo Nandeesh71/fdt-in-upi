@@ -46,6 +46,20 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 from app.upi_transaction_id import generate_upi_transaction_id
 
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://fdt-frontend.onrender.com",   # ← your Render frontend URL
+        "http://localhost:3000",
+        "http://localhost:3001",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Import WebSocket manager
 try:
     from backend.ws_manager import ws_manager
