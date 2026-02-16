@@ -14,15 +14,9 @@ services:
         destination: /index.html
     envVars:
       - key: REACT_APP_USER_BACKEND_URL
-        fromService:
-          type: web
-          name: fdt-user-backend
-          property: url
+        value: https://fdt-user-backend.onrender.com
       - key: REACT_APP_ADMIN_BACKEND_URL
-        fromService:
-          type: web
-          name: fdt-admin-backend
-          property: url
+        value: https://fdt-admin-backend.onrender.com
 
   # ============================================
   # User Backend - FastAPI (Port 8001)
