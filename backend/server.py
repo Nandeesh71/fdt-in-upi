@@ -1,38 +1,7 @@
 """
 FDT Backend Server - Fraud Detection in UPI Transactions
 FastAPI server with user authentication, transaction processing, and ML-based fraud detection
-"""
-from fastapi import FastAPI
-
-app = FastAPI()
-
-# Add this health check endpoint
-@app.get("/health")
-async def health_check():
-    """Health check endpoint for Render"""
-    return {
-        "status": "healthy",
-        "service": "fdt-user-backend",
-        "version": "1.0.0"
-    }
-
-
-from fastapi.middleware.cors import CORSMiddleware
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "https://fdt-frontend.onrender.com",
-        "http://localhost:3000",
-        "http://localhost:3001",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
-    
+""" 
 import os
 import sys
 import uuid
@@ -186,6 +155,11 @@ rate_limiter = RateLimiter(max_requests=100, window_seconds=60)  # 100 requests 
 # Initialize FastAPI app and scheduler
 app = FastAPI(title="FDT API", version="1.0.0")
 scheduler = AsyncIOScheduler()
+
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "service": "fdt-user-backend", "version": "1.0.0"}
 
 # CORS Configuration - Allow localhost + devtunnel URLs for mobile testing
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8000").split(",")
