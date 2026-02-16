@@ -1,8 +1,8 @@
-# render.yaml - Corrected Infrastructure as Code for FDT
+# render.yaml - Render Deployment Configuration
 services:
-  # ============================================
+  # ==========================================
   # Frontend - React PWA (Static Site)
-  # ============================================
+  # ==========================================
   - type: web
     name: fdt-frontend
     env: static
@@ -18,9 +18,9 @@ services:
       - key: REACT_APP_ADMIN_BACKEND_URL
         value: https://fdt-admin-backend.onrender.com
 
-  # ============================================
+  # ==========================================
   # User Backend - FastAPI (Port 8001)
-  # ============================================
+  # ==========================================
   - type: web
     name: fdt-user-backend
     env: python
@@ -55,12 +55,10 @@ services:
         value: production
       - key: PYTHON_VERSION
         value: "3.11.9"
-      - key: GROQ_API_KEY
-        sync: false
 
-  # ============================================
+  # ==========================================
   # Admin Backend - FastAPI (Port 8000)
-  # ============================================
+  # ==========================================
   - type: web
     name: fdt-admin-backend
     env: python
@@ -95,9 +93,9 @@ services:
       - key: PYTHON_VERSION
         value: "3.11.9"
 
-  # ============================================
+  # ==========================================
   # Redis Key-Value Store
-  # ============================================
+  # ==========================================
   - type: redis
     name: fdt-redis
     region: oregon
@@ -105,9 +103,9 @@ services:
     maxmemoryPolicy: allkeys-lru
     ipAllowList: []
 
-# ============================================
+# ==========================================
 # PostgreSQL Database
-# ============================================
+# ==========================================
 databases:
   - name: fdt-database
     databaseName: fdt_db
