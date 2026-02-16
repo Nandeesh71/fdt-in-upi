@@ -1,6 +1,8 @@
-# render.yaml - Infrastructure as Code
+# render.yaml - Corrected Infrastructure as Code for FDT
 services:
-  # Frontend - React PWA
+  # ============================================
+  # Frontend - React PWA (Static Site)
+  # ============================================
   - type: web
     name: fdt-frontend
     env: static
@@ -22,7 +24,9 @@ services:
           name: fdt-admin-backend
           property: url
 
-  # User Backend - Port 8001
+  # ============================================
+  # User Backend - FastAPI (Port 8001)
+  # ============================================
   - type: web
     name: fdt-user-backend
     env: python
@@ -32,11 +36,7 @@ services:
       pip install --upgrade pip
       pip install -r requirements.txt
     startCommand: |
-      uvicorn backend.server:app \
-        --host 0.0.0.0 \
-        --port $PORT \
-        --workers 2 \
-        --log-level info
+      uvicorn backend.server:app --host 0.0.0.0 --port $PORT --workers 2 --log-level info
     healthCheckPath: /health
     autoDeploy: true
     envVars:
@@ -62,9 +62,11 @@ services:
       - key: PYTHON_VERSION
         value: "3.11.9"
       - key: GROQ_API_KEY
-        sync: false  # Must be set manually
+        sync: false
 
-  # Admin Backend - Port 8000  
+  # ============================================
+  # Admin Backend - FastAPI (Port 8000)
+  # ============================================
   - type: web
     name: fdt-admin-backend
     env: python
@@ -74,11 +76,7 @@ services:
       pip install --upgrade pip
       pip install -r requirements.txt
     startCommand: |
-      uvicorn app.main:app \
-        --host 0.0.0.0 \
-        --port $PORT \
-        --workers 2 \
-        --log-level info
+      uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 2 --log-level info
     healthCheckPath: /health
     autoDeploy: true
     envVars:
@@ -103,20 +101,23 @@ services:
       - key: PYTHON_VERSION
         value: "3.11.9"
 
-databases:
-  # PostgreSQL Database
-  - name: fdt-database
-    databaseName: fdt_db
-    user: fdt
-    plan: starter
-    region: oregon
-    ipAllowList: []  # Allow all IPs
-
-# Redis Key-Value Store
-services:
+  # ============================================
+  # Redis Key-Value Store
+  # ============================================
   - type: redis
     name: fdt-redis
     region: oregon
     plan: starter
     maxmemoryPolicy: allkeys-lru
+    ipAllowList: []
+
+# ============================================
+# PostgreSQL Database
+# ============================================
+databases:
+  - name: fdt-database
+    databaseName: fdt_db
+    user: fdt
+    plan: starter
+    region: oregon
     ipAllowList: []
