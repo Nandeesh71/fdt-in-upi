@@ -2,7 +2,18 @@
 FDT Backend Server - Fraud Detection in UPI Transactions
 FastAPI server with user authentication, transaction processing, and ML-based fraud detection
 """
+from fastapi import FastAPI
 
+app = FastAPI()
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for Render"""
+    return {
+        "status": "healthy",
+        "service": "fdt-backend"
+    }
+    
 import os
 import sys
 import uuid
