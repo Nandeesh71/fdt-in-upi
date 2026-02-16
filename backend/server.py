@@ -48,17 +48,7 @@ from app.upi_transaction_id import generate_upi_transaction_id
 
 from fastapi.middleware.cors import CORSMiddleware
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "https://fdt-frontend.onrender.com",   # ← your Render frontend URL
-        "http://localhost:3000",
-        "http://localhost:3001",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+
 
 # Import WebSocket manager
 try:
@@ -174,6 +164,18 @@ scheduler = AsyncIOScheduler()
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "service": "fdt-user-backend", "version": "1.0.0"}
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://fdt-frontend.onrender.com",   # ← your Render frontend URL
+        "http://localhost:3000",
+        "http://localhost:3001",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # CORS Configuration - Allow localhost + devtunnel URLs for mobile testing
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8000").split(",")
