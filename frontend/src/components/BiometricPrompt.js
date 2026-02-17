@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authenticateWithBiometric, isPlatformAuthenticatorAvailable } from '../utils/webauthn';
+import { getStoredUser } from '../api';
 
 const BiometricPrompt = ({ onSuccess, onCancel }) => {
   const navigate = useNavigate();
@@ -20,13 +21,13 @@ const BiometricPrompt = ({ onSuccess, onCancel }) => {
     setIsSupported(available);
     
     if (available) {
-      // Try to get saved phone number
-      const savedPhone = localStorage.getItem('fdt_last_phone');
-      if (savedPhone) {
-        setPhone(savedPhone);
+      // Get phone from stored user data (sessionStorage)
+      const storedUser = getStoredUser();
+      if (storedUser && storedUser.phone) {
+        setPhone(storedUser.phone);
         // Auto-trigger biometric after a short delay
         setTimeout(() => {
-          handleBiometricAuth(savedPhone);
+          handleBiometricAuth(storedUser.phone);
         }, 500);
       } else {
         setShowPhoneInput(true);

@@ -60,16 +60,12 @@ function AppContent() {
         // Check if user has biometric credentials registered
         const hasBiometricCredentials = credentialsArray && credentialsArray.length > 0;
 
-        // If biometric credentials exist, mandatory biometric auth on every app load
-        if (hasBiometricCredentials) {
-          setRequireBiometricAuth(true);
-          setShowBiometricPrompt(true);
-          setIsLoading(false);
-          return; // Don't set authenticated yet - wait for biometric verification
-        }
-
-        // No biometric credentials - proceed with token-based auth
+        // CORRECT FLOW:
+        // 1. Check if we have a valid token first
+        // 2. Then decide whether to use biometric or direct login
+        
         if (token && userDataRaw) {
+          // We have token + user data from previous session
           let userData = userDataRaw;
           if (typeof userDataRaw === 'string') {
             try {
@@ -88,15 +84,33 @@ function AppContent() {
             console.warn('⚠ Token has expired, clearing session');
             window.sessionStorage.removeItem('fdt_token');
             window.sessionStorage.removeItem('fdt_user');
+            window.sessionStorage.removeItem('fdt_credentials');
+            setIsLoading(false);
+            return; // Show login screen (no token)
+          }
+
+          // ✅ Token is valid!
+          // Now check if user has biometric credentials
+          if (hasBiometricCredentials) {
+            // User has biometric enrolled - show biometric prompt to verify identity
+            console.log('✓ Valid token found + biometric credentials exist, showing biometric prompt');
+            setRequireBiometricAuth(true);
+            setShowBiometricPrompt(true);
+            setIsLoading(false);
+            return; // Wait for biometric verification
+          } else {
+            // User has valid token but no biometric - skip to dashboard
+            console.log('✓ Session restored from storage (no biometric):', userData);
+            setUser(userData);
+            setIsAuthenticated(true);
             setIsLoading(false);
             return;
           }
-
-          setUser(userData);
-          setIsAuthenticated(true);
-          console.log('✓ Session restored from storage:', userData);
         } else {
-          console.log('ℹ No session data found in storage');
+          // No token found - user must login
+          console.log('ℹ No session/token found, showing login screen');
+          setIsLoading(false);
+          return;
         }
       } catch (error) {
         console.error('Error restoring session:', error);
@@ -150,12 +164,19 @@ function AppContent() {
   };
 
   const handleBiometricCancel = () => {
-    // User cancelled biometric - if biometric was mandatory, keep them logged out
+    // User cancelled biometric prompt
+    // Only keep them forced if they're in the middle of initial registration
+    console.log('❌ User cancelled biometric prompt. requireBiometricAuth:', requireBiometricAuth);
+    
     if (requireBiometricAuth) {
-      console.warn('⚠ Biometric authentication is required to access the app');
-      setShowBiometricPrompt(true); // Force prompt again
+      // During mandatory initial registration, don't allow skipping
+      console.warn('⚠ Biometric setup is required to complete registration');
+      // Don't show prompt again immediately - let user try again
+      setShowBiometricPrompt(false);
       return;
     }
+    
+    // During normal app use, allow closing biometric prompt
     setShowBiometricPrompt(false);
   };
 

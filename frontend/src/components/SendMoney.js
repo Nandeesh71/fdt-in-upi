@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { createTransaction, searchUsers } from '../api';
 import { useNotifications } from './NotificationSystem';
 import cacheManager from '../utils/cacheManager';
@@ -11,6 +11,7 @@ import FavoritesModal from './FavoritesModal';
 
 const SendMoney = ({ user, setUser, onBack, onLogout }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { addNotification } = useNotifications();
   const [loading, setLoading] = useState(false);
   const [transactionResult, setTransactionResult] = useState(null);
@@ -25,6 +26,26 @@ const SendMoney = ({ user, setUser, onBack, onLogout }) => {
     remarks: ''
   });
   const [error, setError] = useState('');
+
+  // Auto-fill from QR scanner
+  useEffect(() => {
+    if (location.state) {
+      const { recipientPhone, scannedUPI, amount } = location.state;
+      // Use the scanned UPI if available, otherwise use phone number
+      const recipientValue = scannedUPI || (recipientPhone ? `${recipientPhone}@upi` : '');
+      
+      if (recipientValue) {
+        setFormData(prev => ({
+          ...prev,
+          recipient_vpa: recipientValue,
+          amount: amount || ''
+        }));
+        console.log('✓ Auto-filled from QR scan:', recipientValue);
+      }
+    }
+    // Clear location state after reading it
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
