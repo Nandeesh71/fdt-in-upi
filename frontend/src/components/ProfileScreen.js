@@ -63,7 +63,7 @@ const ProfileScreen = ({ user }) => {
       const response = await fetch(`${process.env.REACT_APP_USER_BACKEND_URL || 'http://localhost:8001'}/api/user/profile`, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('fdt_token')}`,
+          'Authorization': `Bearer ${sessionStorage.getItem('fdt_token')}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ name })
