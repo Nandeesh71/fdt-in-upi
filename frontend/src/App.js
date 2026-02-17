@@ -10,6 +10,8 @@ import FraudAlertEnhanced from './components/FraudAlertEnhanced';
 import RiskAnalysis from './components/RiskAnalysis';
 import NotificationPanel from './components/NotificationPanel';
 import BiometricPrompt from './components/BiometricPrompt';
+import ProfileScreen from './components/ProfileScreen';
+import QRScanner from './components/QRScanner';
 import { NotificationProvider } from './components/NotificationSystem';
 import cacheManager from './utils/cacheManager';
 import sessionStorage from './utils/sessionStorageManager';
@@ -201,6 +203,26 @@ function AppContent() {
              element={
                isAuthenticated ? (
                  <TransactionHistory user={user} />
+               ) : (
+                 <Navigate to="/login" />
+               )
+             }
+           />
+           <Route
+             path="/profile"
+             element={
+               isAuthenticated ? (
+                 <ProfileScreen user={user} />
+               ) : (
+                 <Navigate to="/login" />
+               )
+             }
+           />
+           <Route
+             path="/scan-qr"
+             element={
+               isAuthenticated ? (
+                 <QRScanner />
                ) : (
                  <Navigate to="/login" />
                )

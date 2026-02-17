@@ -1037,6 +1037,80 @@ async def get_user_dashboard(user_id: str = Depends(get_current_user)):
     
     return await run_in_threadpool(_get_dashboard)
 
+@app.get("/api/user/profile")
+async def get_user_profile(user_id: str = Depends(get_current_user)):
+    """Get user profile information"""
+    def _get_profile():
+        conn = get_db_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT user_id, name, phone, email, balance, created_at FROM users WHERE user_id = %s",
+                (user_id,)
+            )
+            user = cur.fetchone()
+            
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+            
+            user_dict = dict(user)
+            user_dict["upi_id"] = f"{user_dict['phone'].replace('+91', '').replace('+', '')}@fdt"
+            
+            return {
+                "status": "success",
+                "user": dict_to_json_serializable(user_dict)
+            }
+        finally:
+            conn.close()
+    
+    return await run_in_threadpool(_get_profile)
+
+@app.put("/api/user/profile")
+async def update_user_profile(
+    profile_data: dict,
+    user_id: str = Depends(get_current_user)
+):
+    """Update user profile (only name can be changed, phone is read-only)"""
+    def _update_profile():
+        conn = get_db_conn()
+        try:
+            cur = conn.cursor()
+            
+            # Only allow updating name
+            if "name" not in profile_data:
+                raise HTTPException(status_code=400, detail="No valid fields to update")
+            
+            name = profile_data.get("name", "").strip()
+            if not name:
+                raise HTTPException(status_code=400, detail="Name cannot be empty")
+            
+            # Update the name
+            cur.execute(
+                "UPDATE users SET name = %s WHERE user_id = %s",
+                (name, user_id)
+            )
+            conn.commit()
+            
+            # Get updated user
+            cur.execute(
+                "SELECT user_id, name, phone, email, balance, created_at FROM users WHERE user_id = %s",
+                (user_id,)
+            )
+            user = cur.fetchone()
+            
+            user_dict = dict(user)
+            user_dict["upi_id"] = f"{user_dict['phone'].replace('+91', '').replace('+', '')}@fdt"
+            
+            return {
+                "status": "success",
+                "message": "Profile updated successfully",
+                "user": dict_to_json_serializable(user_dict)
+            }
+        finally:
+            conn.close()
+    
+    return await run_in_threadpool(_update_profile)
+
 # ============================================================================
 # API ENDPOINTS - TRANSACTIONS
 # ============================================================================
