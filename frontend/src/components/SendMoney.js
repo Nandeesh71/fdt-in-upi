@@ -147,7 +147,7 @@ const handleSubmit = async (e) => {
          const newBalance = user.balance - parseFloat(formData.amount);
          const updatedUser = { ...user, balance: newBalance };
          setUser(updatedUser);
-         localStorage.setItem('fdt_user', JSON.stringify(updatedUser));
+         sessionStorage.setItem('fdt_user', JSON.stringify(updatedUser));
        }
 
         // Set transaction result

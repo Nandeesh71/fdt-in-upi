@@ -35,8 +35,8 @@ const Dashboard = ({ user, onLogout }) => {
 
   // Set up WebSocket connection for real-time transaction updates
   useEffect(() => {
-    // Get current user ID from user prop or sessionStorage
-    const currentUserId = user?.user_id || sessionStorage.getItem('fdt_user_id');
+    // Get current user ID from user prop (passed from App.js)
+    const currentUserId = user?.user_id;
     if (!currentUserId) {
       console.warn('No user ID available for WebSocket connection');
       return;

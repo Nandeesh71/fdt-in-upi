@@ -74,7 +74,7 @@ function AppContent() {
             sessionStorage.removeItem('fdt_user');
             
             // Show biometric prompt for re-authentication if credentials exist
-            const hasCredentials = localStorage.getItem('fdt_credentials');
+            const hasCredentials = sessionStorage.getItem('fdt_credentials');
             if (hasCredentials && JSON.parse(hasCredentials).length > 0) {
               setShowBiometricPrompt(true);
             }
@@ -87,7 +87,7 @@ function AppContent() {
           console.log('✓ Session restored from storage:', userData);
         } else {
           // No active session - check if user has biometric credentials
-          const hasCredentials = localStorage.getItem('fdt_credentials');
+          const hasCredentials = sessionStorage.getItem('fdt_credentials');
           if (hasCredentials && JSON.parse(hasCredentials).length > 0) {
             setShowBiometricPrompt(true);
           }
@@ -151,9 +151,11 @@ function AppContent() {
     // Clear all cache when logging out
     cacheManager.clear();
     
-    // Use robust storage that works on mobile
+    // Clear session data
     sessionStorage.removeItem('fdt_token');
     sessionStorage.removeItem('fdt_user');
+    sessionStorage.removeItem('fdt_user_id');
+    sessionStorage.removeItem('fdt_credentials');
     setUser(null);
     setIsAuthenticated(false);
   };

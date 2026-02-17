@@ -7,6 +7,7 @@ import {
   revokeCredential,
   registerBiometric 
 } from '../utils/webauthn';
+import { getAuthToken, setStoredUser } from '../api';
 import { formatUPIId } from '../utils/helpers';
 import BiometricSetup from './BiometricSetup';
 
@@ -63,7 +64,7 @@ const ProfileScreen = ({ user }) => {
       const response = await fetch(`${process.env.REACT_APP_USER_BACKEND_URL || 'http://localhost:8001'}/api/user/profile`, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${sessionStorage.getItem('fdt_token')}`,
+          'Authorization': `Bearer ${getAuthToken()}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ name })
@@ -78,7 +79,7 @@ const ProfileScreen = ({ user }) => {
       // Update session storage
       const userData = JSON.parse(sessionStorage.getItem('fdt_user') || '{}');
       userData.name = name;
-      sessionStorage.setItem('fdt_user', JSON.stringify(userData));
+      setStoredUser(userData);
       
       setSuccess('Profile updated successfully!');
       setIsEditing(false);

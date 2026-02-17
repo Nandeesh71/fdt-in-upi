@@ -75,10 +75,7 @@ export const registerBiometric = async (deviceName = null) => {
   const available = await isPlatformAuthenticatorAvailable();
   if (!available) throw new Error('No biometric authenticator available on this device');
 
-  // FIX: read token through the shared helper (sessionStorage) instead of
-  //      localStorage – previously the token was never found here because
-  //      login stored it in sessionStorage via api.js but this file read
-  //      localStorage, so the check always failed.
+    // Read token from sessionStorage via the shared helper from api.js
   const token = getAuthToken();
   console.log('🔐 Token check:', { hasToken: !!token, tokenLength: token?.length });
   if (!token) throw new Error('User not authenticated – please log in again');
