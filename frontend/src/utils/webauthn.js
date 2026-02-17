@@ -4,7 +4,7 @@
  */
 
 /* eslint-disable no-undef */
-import { getAuthToken, setAuthToken, setStoredUser, TOKEN_KEY } from '../api';
+import { getAuthToken, setAuthToken, setStoredUser } from '../api';
 
 // FIX: derive the WebSocket / fetch base URL from the same env var that api.js
 //      uses so there is a single source of truth.
