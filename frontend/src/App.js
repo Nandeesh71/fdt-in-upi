@@ -48,10 +48,25 @@ function AppContent() {
     const restoreSession = async () => {
       try {
         const token = sessionStorage.getItem('fdt_token');
-        const userData = sessionStorage.getItem('fdt_user');
+        const userDataRaw = sessionStorage.getItem('fdt_user');
 
         // Only restore if both token and user data exist
-        if (token && userData) {
+        if (token && userDataRaw) {
+          // Parse user data if it's a string (it should be stored as JSON string)
+          let userData = userDataRaw;
+          if (typeof userDataRaw === 'string') {
+            try {
+              userData = JSON.parse(userDataRaw);
+            } catch (e) {
+              console.error('Failed to parse stored user data:', e);
+              // Clear invalid data
+              sessionStorage.removeItem('fdt_user');
+              sessionStorage.removeItem('fdt_token');
+              setIsLoading(false);
+              return;
+            }
+          }
+
           // Check if token is expired
           if (isTokenExpired(token)) {
             console.warn('⚠ Token has expired, clearing session');
@@ -69,7 +84,7 @@ function AppContent() {
 
           setUser(userData);
           setIsAuthenticated(true);
-          console.log('✓ Session restored from storage');
+          console.log('✓ Session restored from storage:', userData);
         } else {
           // No active session - check if user has biometric credentials
           const hasCredentials = localStorage.getItem('fdt_credentials');
@@ -104,10 +119,21 @@ function AppContent() {
     // Clear all cache when logging in to prevent stale data
     cacheManager.clear();
     
-    // Use robust storage that works on mobile
+    // Parse userData if it's a string, ensure it's an object
+    let parsedUser = userData;
+    if (typeof userData === 'string') {
+      try {
+        parsedUser = JSON.parse(userData);
+      } catch (e) {
+        console.error('Failed to parse user data in handleLogin:', e);
+        parsedUser = userData;
+      }
+    }
+    
+    // Store token as string, user data as JSON string
     sessionStorage.setItem('fdt_token', token);
-    sessionStorage.setItem('fdt_user', userData);
-    setUser(userData);
+    sessionStorage.setItem('fdt_user', JSON.stringify(parsedUser));
+    setUser(parsedUser);
     setIsAuthenticated(true);
     setShowBiometricPrompt(false);
   };
