@@ -45,6 +45,7 @@ function AppContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
   const [showBiometricPrompt, setShowBiometricPrompt] = useState(false);
+  const [requireBiometricAuth, setRequireBiometricAuth] = useState(false);
 
   useEffect(() => {
     // Restore session from storage on app load
@@ -53,8 +54,21 @@ function AppContent() {
         // ✅ FIX: use window.sessionStorage explicitly (not the imported wrapper)
         const token = window.sessionStorage.getItem('fdt_token');
         const userDataRaw = window.sessionStorage.getItem('fdt_user');
+        const hasCredentials = window.sessionStorage.getItem('fdt_credentials');
+        const credentialsArray = hasCredentials ? JSON.parse(hasCredentials) : [];
 
-        // Only restore if both token and user data exist
+        // Check if user has biometric credentials registered
+        const hasBiometricCredentials = credentialsArray && credentialsArray.length > 0;
+
+        // If biometric credentials exist, mandatory biometric auth on every app load
+        if (hasBiometricCredentials) {
+          setRequireBiometricAuth(true);
+          setShowBiometricPrompt(true);
+          setIsLoading(false);
+          return; // Don't set authenticated yet - wait for biometric verification
+        }
+
+        // No biometric credentials - proceed with token-based auth
         if (token && userDataRaw) {
           let userData = userDataRaw;
           if (typeof userDataRaw === 'string') {
@@ -74,12 +88,6 @@ function AppContent() {
             console.warn('⚠ Token has expired, clearing session');
             window.sessionStorage.removeItem('fdt_token');
             window.sessionStorage.removeItem('fdt_user');
-
-            // Show biometric prompt for re-authentication if credentials exist
-            const hasCredentials = window.sessionStorage.getItem('fdt_credentials');
-            if (hasCredentials && JSON.parse(hasCredentials).length > 0) {
-              setShowBiometricPrompt(true);
-            }
             setIsLoading(false);
             return;
           }
@@ -88,11 +96,6 @@ function AppContent() {
           setIsAuthenticated(true);
           console.log('✓ Session restored from storage:', userData);
         } else {
-          // No active session — check if user has biometric credentials
-          const hasCredentials = window.sessionStorage.getItem('fdt_credentials');
-          if (hasCredentials && JSON.parse(hasCredentials).length > 0) {
-            setShowBiometricPrompt(true);
-          }
           console.log('ℹ No session data found in storage');
         }
       } catch (error) {
@@ -143,9 +146,16 @@ function AppContent() {
   const handleBiometricSuccess = (result) => {
     console.log('🎉 Biometric login successful:', result);
     handleLogin(result.user, result.token);
+    setRequireBiometricAuth(false);
   };
 
   const handleBiometricCancel = () => {
+    // User cancelled biometric - if biometric was mandatory, keep them logged out
+    if (requireBiometricAuth) {
+      console.warn('⚠ Biometric authentication is required to access the app');
+      setShowBiometricPrompt(true); // Force prompt again
+      return;
+    }
     setShowBiometricPrompt(false);
   };
 
@@ -169,8 +179,8 @@ function AppContent() {
   return (
     <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <div className="min-h-screen bg-gray-50">
-        {/* Biometric Prompt Overlay */}
-        {showBiometricPrompt && !isAuthenticated && (
+        {/* Biometric Prompt Overlay - Mandatory if requireBiometricAuth is true */}
+        {showBiometricPrompt && (
           <BiometricPrompt
             onSuccess={handleBiometricSuccess}
             onCancel={handleBiometricCancel}

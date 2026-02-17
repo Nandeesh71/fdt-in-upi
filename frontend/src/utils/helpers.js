@@ -1,6 +1,10 @@
 export const formatUPIId = (phoneNumber) => {
-  // Remove all non-digit characters and append @upi
-  const cleaned = phoneNumber.replace(/\D/g, '');
+  // Remove all non-digit characters
+  let cleaned = phoneNumber.replace(/\D/g, '');
+  // Remove country code (91) if at the start, keeping only 10-digit local number
+  if (cleaned.startsWith('91') && cleaned.length === 12) {
+    cleaned = cleaned.slice(2);
+  }
   return `${cleaned}@upi`;
 };
 
