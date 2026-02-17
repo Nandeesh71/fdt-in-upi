@@ -1585,20 +1585,26 @@ async def get_user_transactions(
     limit: int = 20,
     status_filter: Optional[str] = None
 ):
-    """Get user transaction history with optional filtering"""
+    """Get user transaction history with optional filtering - includes both sent and received transactions"""
     def _get_transactions():
         conn = get_db_conn()
         try:
             cur = conn.cursor()
             
-            # Optimized query - avoid LEFT JOIN, fetch fraud_alerts separately only when needed
+            # Query to get both sent and received transactions with transaction type
             query = """
-                SELECT tx_id, amount, recipient_vpa, tx_type, action, risk_score, 
-                       db_status, remarks, created_at
+                SELECT 
+                    tx_id, amount, recipient_vpa, tx_type, action, risk_score, 
+                    db_status, remarks, created_at, user_id, receiver_user_id,
+                    CASE 
+                        WHEN user_id = %s THEN 'sent'
+                        WHEN receiver_user_id = %s THEN 'received'
+                        ELSE 'unknown'
+                    END as transaction_direction
                 FROM transactions
-                WHERE user_id = %s
+                WHERE user_id = %s OR receiver_user_id = %s
             """
-            params = [user_id]
+            params = [user_id, user_id, user_id, user_id]
             
             if status_filter:
                 query += " AND action = %s"
@@ -1610,19 +1616,34 @@ async def get_user_transactions(
             cur.execute(query, params)
             transactions = cur.fetchall()
             
-            # Fetch fraud_alerts for all transactions in a single query (faster than LEFT JOIN)
+            # Fetch sender info for received transactions and fraud_alerts for all transactions
             if transactions:
                 tx_ids = [tx['tx_id'] for tx in transactions]
                 placeholders = ','.join(['%s'] * len(tx_ids))
+                
+                # Get fraud alerts
                 cur.execute(
                     f"SELECT tx_id, reason FROM fraud_alerts WHERE tx_id IN ({placeholders})",
                     tx_ids
                 )
                 fraud_alerts_map = {row['tx_id']: row['reason'] for row in cur.fetchall()}
+                
+                # Get sender information for received transactions
+                sender_ids = [tx['user_id'] for tx in transactions if tx.get('transaction_direction') == 'received' and tx['user_id']]
+                if sender_ids:
+                    sender_placeholders = ','.join(['%s'] * len(sender_ids))
+                    cur.execute(
+                        f"SELECT user_id, name, phone FROM users WHERE user_id IN ({sender_placeholders})",
+                        sender_ids
+                    )
+                    sender_info_map = {row['user_id']: {'name': row['name'], 'phone': row['phone']} for row in cur.fetchall()}
+                else:
+                    sender_info_map = {}
             else:
                 fraud_alerts_map = {}
+                sender_info_map = {}
             
-            # Process transactions to add fraud reasons and risk_level
+            # Process transactions to add fraud reasons, risk_level, and sender info
             processed_transactions = []
             delay_threshold = 0.35
             block_threshold = 0.70
@@ -1643,6 +1664,13 @@ async def get_user_transactions(
                     tx_dict["risk_level"] = "DELAYED"
                 else:
                     tx_dict["risk_level"] = "APPROVED"
+                
+                # Add sender information for received transactions
+                if tx_dict.get('transaction_direction') == 'received' and tx_dict.get('user_id'):
+                    sender_info = sender_info_map.get(tx_dict['user_id'])
+                    if sender_info:
+                        tx_dict["sender_name"] = sender_info['name']
+                        tx_dict["sender_phone"] = sender_info['phone']
                 
                 processed_transactions.append(tx_dict)
             
