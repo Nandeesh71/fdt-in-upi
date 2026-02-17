@@ -24,7 +24,7 @@ const ProfileScreen = ({ user }) => {
   const [showBiometricSetup, setShowBiometricSetup] = useState(false);
 
   // Generate UPI ID from phone
-  const upiId = user?.phone ? `${user.phone}@fdt` : 'user@fdt';
+  const upiId = user?.phone ? `${user.phone}@upi` : 'user@upi';
 
   useEffect(() => {
     checkBiometricSupport();

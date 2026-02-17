@@ -93,10 +93,10 @@ const QRScanner = () => {
         const params = new URLSearchParams(url.search);
         
         const payeeAddress = params.get('pa') || '';
-        const payeeName = params.get('pn') || '';
+        const payeeName = decodeURIComponent(params.get('pn') || '');
         const amount = params.get('am') || '';
         const currency = params.get('cu') || 'INR';
-        const transactionNote = params.get('tn') || '';
+        const transactionNote = decodeURIComponent(params.get('tn') || '');
 
         // Extract phone number from UPI ID (assuming format: phone@provider)
         const recipientPhone = payeeAddress.split('@')[0];

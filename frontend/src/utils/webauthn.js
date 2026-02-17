@@ -95,11 +95,13 @@ export const registerBiometric = async (deviceName = null) => {
 
     // Get authentication token
     const token = localStorage.getItem('fdt_token');
+    console.log('🔐 Token check:', { hasToken: !!token, tokenLength: token?.length });
     if (!token) {
-      throw new Error('User not authenticated');
+      throw new Error('User not authenticated - no token found in localStorage');
     }
 
     // Request challenge from server
+    console.log('🔐 Requesting challenge from:', BACKEND_URL);
     const challengeResponse = await fetch(`${BACKEND_URL}/api/auth/register-challenge`, {
       method: 'POST',
       headers: {
@@ -109,7 +111,10 @@ export const registerBiometric = async (deviceName = null) => {
     });
 
     if (!challengeResponse.ok) {
-      throw new Error('Failed to get registration challenge');
+      const errorData = await challengeResponse.json().catch(() => ({}));
+      const errorMsg = errorData.detail || `HTTP ${challengeResponse.status} - Failed to get registration challenge`;
+      console.error('Challenge endpoint error:', { status: challengeResponse.status, error: errorMsg });
+      throw new Error(errorMsg);
     }
 
     const { challenge, user_id } = await challengeResponse.json();
