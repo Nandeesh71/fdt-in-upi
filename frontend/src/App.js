@@ -14,7 +14,10 @@ import ProfileScreen from './components/ProfileScreen';
 import QRScanner from './components/QRScanner';
 import { NotificationProvider } from './components/NotificationSystem';
 import cacheManager from './utils/cacheManager';
-import sessionStorage from './utils/sessionStorageManager';
+// ✅ REMOVED: import sessionStorage from './utils/sessionStorageManager';
+// That import was shadowing native sessionStorage, causing api.js (which uses
+// native sessionStorage) to never see the token written here. All storage
+// calls now use window.sessionStorage explicitly to avoid any shadowing.
 
 /**
  * Decode and validate JWT token expiry without verifying signature
@@ -24,11 +27,11 @@ const isTokenExpired = (token) => {
   try {
     const parts = token.split('.');
     if (parts.length !== 3) return true;
-    
+
     const decoded = JSON.parse(atob(parts[1]));
     const expiryTime = decoded.exp * 1000; // exp is in seconds
     const currentTime = Date.now();
-    
+
     // Consider token expired if less than 1 minute remaining
     return currentTime > expiryTime - 60000;
   } catch (error) {
@@ -47,21 +50,20 @@ function AppContent() {
     // Restore session from storage on app load
     const restoreSession = async () => {
       try {
-        const token = sessionStorage.getItem('fdt_token');
-        const userDataRaw = sessionStorage.getItem('fdt_user');
+        // ✅ FIX: use window.sessionStorage explicitly (not the imported wrapper)
+        const token = window.sessionStorage.getItem('fdt_token');
+        const userDataRaw = window.sessionStorage.getItem('fdt_user');
 
         // Only restore if both token and user data exist
         if (token && userDataRaw) {
-          // Parse user data if it's a string (it should be stored as JSON string)
           let userData = userDataRaw;
           if (typeof userDataRaw === 'string') {
             try {
               userData = JSON.parse(userDataRaw);
             } catch (e) {
               console.error('Failed to parse stored user data:', e);
-              // Clear invalid data
-              sessionStorage.removeItem('fdt_user');
-              sessionStorage.removeItem('fdt_token');
+              window.sessionStorage.removeItem('fdt_user');
+              window.sessionStorage.removeItem('fdt_token');
               setIsLoading(false);
               return;
             }
@@ -70,11 +72,11 @@ function AppContent() {
           // Check if token is expired
           if (isTokenExpired(token)) {
             console.warn('⚠ Token has expired, clearing session');
-            sessionStorage.removeItem('fdt_token');
-            sessionStorage.removeItem('fdt_user');
-            
+            window.sessionStorage.removeItem('fdt_token');
+            window.sessionStorage.removeItem('fdt_user');
+
             // Show biometric prompt for re-authentication if credentials exist
-            const hasCredentials = sessionStorage.getItem('fdt_credentials');
+            const hasCredentials = window.sessionStorage.getItem('fdt_credentials');
             if (hasCredentials && JSON.parse(hasCredentials).length > 0) {
               setShowBiometricPrompt(true);
             }
@@ -86,8 +88,8 @@ function AppContent() {
           setIsAuthenticated(true);
           console.log('✓ Session restored from storage:', userData);
         } else {
-          // No active session - check if user has biometric credentials
-          const hasCredentials = sessionStorage.getItem('fdt_credentials');
+          // No active session — check if user has biometric credentials
+          const hasCredentials = window.sessionStorage.getItem('fdt_credentials');
           if (hasCredentials && JSON.parse(hasCredentials).length > 0) {
             setShowBiometricPrompt(true);
           }
@@ -103,7 +105,7 @@ function AppContent() {
     restoreSession();
   }, []);
 
-  // Listen for logout events from API interceptor
+  // Listen for logout events dispatched by the axios 401 interceptor in api.js
   useEffect(() => {
     const handleLogoutEvent = () => {
       console.log('🚪 Logout event received from API');
@@ -118,8 +120,7 @@ function AppContent() {
   const handleLogin = (userData, token) => {
     // Clear all cache when logging in to prevent stale data
     cacheManager.clear();
-    
-    // Parse userData if it's a string, ensure it's an object
+
     let parsedUser = userData;
     if (typeof userData === 'string') {
       try {
@@ -129,10 +130,11 @@ function AppContent() {
         parsedUser = userData;
       }
     }
-    
-    // Store token as string, user data as JSON string
-    sessionStorage.setItem('fdt_token', token);
-    sessionStorage.setItem('fdt_user', JSON.stringify(parsedUser));
+
+    // ✅ FIX: write to native window.sessionStorage so api.js interceptor
+    //         (which reads window.sessionStorage) can find the token.
+    window.sessionStorage.setItem('fdt_token', token);
+    window.sessionStorage.setItem('fdt_user', JSON.stringify(parsedUser));
     setUser(parsedUser);
     setIsAuthenticated(true);
     setShowBiometricPrompt(false);
@@ -150,12 +152,12 @@ function AppContent() {
   const handleLogout = () => {
     // Clear all cache when logging out
     cacheManager.clear();
-    
-    // Clear session data
-    sessionStorage.removeItem('fdt_token');
-    sessionStorage.removeItem('fdt_user');
-    sessionStorage.removeItem('fdt_user_id');
-    sessionStorage.removeItem('fdt_credentials');
+
+    // ✅ FIX: clear from native window.sessionStorage
+    window.sessionStorage.removeItem('fdt_token');
+    window.sessionStorage.removeItem('fdt_user');
+    window.sessionStorage.removeItem('fdt_user_id');
+    window.sessionStorage.removeItem('fdt_credentials');
     setUser(null);
     setIsAuthenticated(false);
   };
@@ -174,7 +176,7 @@ function AppContent() {
             onCancel={handleBiometricCancel}
           />
         )}
-        
+
         <Routes>
           <Route
             path="/login"
@@ -186,16 +188,16 @@ function AppContent() {
               )
             }
           />
-           <Route
-             path="/send-money-login"
-             element={
-               isAuthenticated ? (
-                 <Navigate to="/send-money" />
-               ) : (
-                 <Navigate to="/login" />
-               )
-             }
-           />
+          <Route
+            path="/send-money-login"
+            element={
+              isAuthenticated ? (
+                <Navigate to="/send-money" />
+              ) : (
+                <Navigate to="/login" />
+              )
+            }
+          />
           <Route
             path="/register"
             element={
@@ -206,7 +208,7 @@ function AppContent() {
               )
             }
           />
-<Route
+          <Route
             path="/dashboard"
             element={
               isAuthenticated ? (
@@ -215,47 +217,47 @@ function AppContent() {
                 <Navigate to="/login" />
               )
             }
-           />
-            <Route
-              path="/send-money"
-              element={
-                isAuthenticated ? (
-                  <SendMoney user={user} setUser={setUser} onLogout={handleLogout} />
-                ) : (
-                  <Navigate to="/send-money-login" />
-                )
-              }
-            />
-           <Route
-             path="/transactions"
-             element={
-               isAuthenticated ? (
-                 <TransactionHistory user={user} />
-               ) : (
-                 <Navigate to="/login" />
-               )
-             }
-           />
-           <Route
-             path="/profile"
-             element={
-               isAuthenticated ? (
-                 <ProfileScreen user={user} />
-               ) : (
-                 <Navigate to="/login" />
-               )
-             }
-           />
-           <Route
-             path="/scan-qr"
-             element={
-               isAuthenticated ? (
-                 <QRScanner />
-               ) : (
-                 <Navigate to="/login" />
-               )
-             }
-           />
+          />
+          <Route
+            path="/send-money"
+            element={
+              isAuthenticated ? (
+                <SendMoney user={user} setUser={setUser} onLogout={handleLogout} />
+              ) : (
+                <Navigate to="/send-money-login" />
+              )
+            }
+          />
+          <Route
+            path="/transactions"
+            element={
+              isAuthenticated ? (
+                <TransactionHistory user={user} />
+              ) : (
+                <Navigate to="/login" />
+              )
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              isAuthenticated ? (
+                <ProfileScreen user={user} />
+              ) : (
+                <Navigate to="/login" />
+              )
+            }
+          />
+          <Route
+            path="/scan-qr"
+            element={
+              isAuthenticated ? (
+                <QRScanner />
+              ) : (
+                <Navigate to="/login" />
+              )
+            }
+          />
           <Route
             path="/fraud-alert/:txId"
             element={
@@ -266,19 +268,19 @@ function AppContent() {
               )
             }
           />
-           <Route
-             path="/risk-analysis"
-             element={
-               isAuthenticated ? (
-                 <RiskAnalysis user={user} />
-               ) : (
-                 <Navigate to="/login" />
-               )
-             }
-           />
-           <Route
-             path="/"
-             element={
+          <Route
+            path="/risk-analysis"
+            element={
+              isAuthenticated ? (
+                <RiskAnalysis user={user} />
+              ) : (
+                <Navigate to="/login" />
+              )
+            }
+          />
+          <Route
+            path="/"
+            element={
               isAuthenticated ? (
                 <Navigate to="/dashboard" />
               ) : (
@@ -302,5 +304,3 @@ function App() {
 }
 
 export default App;
-  
-//bio
