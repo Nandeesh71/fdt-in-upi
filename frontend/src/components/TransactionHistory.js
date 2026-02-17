@@ -24,6 +24,7 @@ const TransactionHistory = ({ user }) => {
   const [amountMax, setAmountMax] = useState('');
   const [riskFilter, setRiskFilter] = useState('all'); // all, low, medium, high
   const [sortBy, setSortBy] = useState('newest'); // newest, oldest, amount-high, amount-low
+  const [directionFilter, setDirectionFilter] = useState('all'); // all, sent, received
 
   // Export modal state
   const [showExportModal, setShowExportModal] = useState(false);
@@ -37,7 +38,7 @@ const TransactionHistory = ({ user }) => {
   useEffect(() => {
     applyFiltersAndSearch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [transactions, filter, searchQuery, dateFilter, amountMin, amountMax, riskFilter, sortBy]);
+  }, [transactions, filter, searchQuery, dateFilter, amountMin, amountMax, riskFilter, sortBy, directionFilter]);
 
   useEffect(() => {
     loadTransactions();
@@ -116,13 +117,20 @@ const TransactionHistory = ({ user }) => {
       result = result.filter(tx => tx.action.toLowerCase() === filter.toLowerCase());
     }
 
-    // Search by recipient or transaction ID
+    // Filter by transaction direction (sent/received)
+    if (directionFilter !== 'all') {
+      result = result.filter(tx => tx.transaction_direction === directionFilter);
+    }
+
+    // Search by recipient/sender, transaction ID, or remarks
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       result = result.filter(tx =>
         tx.recipient_vpa.toLowerCase().includes(query) ||
         tx.tx_id.toLowerCase().includes(query) ||
-        (tx.remarks && tx.remarks.toLowerCase().includes(query))
+        (tx.remarks && tx.remarks.toLowerCase().includes(query)) ||
+        (tx.sender_name && tx.sender_name.toLowerCase().includes(query)) ||
+        (tx.sender_phone && tx.sender_phone.toLowerCase().includes(query))
       );
     }
 
@@ -178,10 +186,11 @@ const TransactionHistory = ({ user }) => {
     setRiskFilter('all');
     setSortBy('newest');
     setFilter('all');
+    setDirectionFilter('all');
   };
 
   const hasActiveFilters = () => {
-    return searchQuery || dateFilter !== 'all' || amountMin || amountMax || riskFilter !== 'all' || sortBy !== 'newest' || filter !== 'all';
+    return searchQuery || dateFilter !== 'all' || amountMin || amountMax || riskFilter !== 'all' || sortBy !== 'newest' || filter !== 'all' || directionFilter !== 'all';
   };
 
   const getExplanation = (action, riskScore, reasons) => {
@@ -517,7 +526,7 @@ const TransactionHistory = ({ user }) => {
         <div className="mb-6 relative">
           <input
             type="text"
-            placeholder="Search by recipient, transaction ID, or remarks..."
+            placeholder="Search by sender, recipient, transaction ID, or remarks..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full px-4 py-3 pl-12 bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl text-white placeholder-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500 transition"
@@ -676,6 +685,52 @@ const TransactionHistory = ({ user }) => {
           </button>
         </div>
 
+        {/* Transaction Direction Filter */}
+        <div className="bg-white/10 backdrop-blur-xl rounded-2xl shadow-lg p-2 mb-6 flex space-x-2 border border-white/20" data-testid="direction-filter-tabs">
+          <button
+            onClick={() => setDirectionFilter('all')}
+            className={`flex-1 py-2 rounded-lg font-semibold text-sm transition duration-200 flex items-center justify-center space-x-2 ${
+              directionFilter === 'all'
+                ? 'bg-indigo-600 text-white'
+                : 'text-purple-300 hover:bg-white/10'
+            }`}
+            data-testid="direction-filter-all"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+            </svg>
+            <span>All Transactions</span>
+          </button>
+          <button
+            onClick={() => setDirectionFilter('sent')}
+            className={`flex-1 py-2 rounded-lg font-semibold text-sm transition duration-200 flex items-center justify-center space-x-2 ${
+              directionFilter === 'sent'
+                ? 'bg-red-600 text-white'
+                : 'text-purple-300 hover:bg-white/10'
+            }`}
+            data-testid="direction-filter-sent"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+            </svg>
+            <span>Sent</span>
+          </button>
+          <button
+            onClick={() => setDirectionFilter('received')}
+            className={`flex-1 py-2 rounded-lg font-semibold text-sm transition duration-200 flex items-center justify-center space-x-2 ${
+              directionFilter === 'received'
+                ? 'bg-green-600 text-white'
+                : 'text-purple-300 hover:bg-white/10'
+            }`}
+            data-testid="direction-filter-received"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16l-4-4m0 0l4-4m-4 4h18" />
+            </svg>
+            <span>Received</span>
+          </button>
+        </div>
+
         {/* Results Summary */}
         {filteredTransactions.length !== transactions.length && hasActiveFilters() && (
           <div className="mb-4 p-4 bg-blue-500/20 border border-blue-400/30 rounded-lg text-blue-300 text-sm">
@@ -743,11 +798,15 @@ const TransactionHistory = ({ user }) => {
              {filteredTransactions.map((tx) => {
               const explanation = getExplanation(tx.action, tx.risk_score, tx.fraud_reasons);
               const isExpanded = expandedTransaction === tx.tx_id;
+              const isReceived = tx.transaction_direction === 'received';
+              const isSent = tx.transaction_direction === 'sent';
               
               return (
                 <div
                   key={tx.tx_id}
-                  className="bg-white/10 backdrop-blur-xl rounded-xl shadow-md hover:shadow-lg transition duration-200 overflow-hidden border border-white/20"
+                  className={`bg-white/10 backdrop-blur-xl rounded-xl shadow-md hover:shadow-lg transition duration-200 overflow-hidden border-l-4 ${
+                    isReceived ? 'border-l-green-500' : 'border-l-red-500'
+                  } border-r border-t border-b border-white/20`}
                   data-testid={`transaction-${tx.tx_id}`}
                 >
                   <div
@@ -756,14 +815,52 @@ const TransactionHistory = ({ user }) => {
                   >
                     <div className="flex justify-between items-start mb-3">
                       <div className="flex-1">
-                        <p className="font-semibold text-white text-lg">{tx.recipient_vpa}</p>
-                        <p className="text-xs text-purple-300 mt-1">{formatDate(tx.created_at)}</p>
+                        {/* Transaction Direction Indicator */}
+                        <div className="flex items-center space-x-2 mb-2">
+                          {isReceived ? (
+                            <>
+                              <div className="bg-green-500/20 p-1.5 rounded-full">
+                                <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16l-4-4m0 0l4-4m-4 4h18" />
+                                </svg>
+                              </div>
+                              <span className="text-xs font-semibold text-green-400 uppercase">Received</span>
+                            </>
+                          ) : (
+                            <>
+                              <div className="bg-red-500/20 p-1.5 rounded-full">
+                                <svg className="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                </svg>
+                              </div>
+                              <span className="text-xs font-semibold text-red-400 uppercase">Sent</span>
+                            </>
+                          )}
+                        </div>
+
+                        {/* Recipient/Sender Information */}
+                        {isReceived ? (
+                          <div>
+                            <p className="text-sm text-purple-300">From</p>
+                            <p className="font-semibold text-white text-lg">{tx.sender_name || 'Unknown'}</p>
+                            <p className="text-xs text-purple-300 mt-0.5">{tx.sender_phone || tx.recipient_vpa}</p>
+                          </div>
+                        ) : (
+                          <div>
+                            <p className="text-sm text-purple-300">To</p>
+                            <p className="font-semibold text-white text-lg">{tx.recipient_vpa}</p>
+                          </div>
+                        )}
+                        
+                        <p className="text-xs text-purple-300 mt-2">{formatDate(tx.created_at)}</p>
                         {tx.remarks && (
                           <p className="text-sm text-purple-200 mt-1 italic">"{tx.remarks}"</p>
                         )}
                       </div>
                       <div className="text-right">
-                        <p className="font-bold text-xl text-white">{formatCurrency(tx.amount)}</p>
+                        <p className={`font-bold text-2xl ${isReceived ? 'text-green-400' : 'text-white'}`}>
+                          {isReceived ? '+' : '-'} {formatCurrency(tx.amount)}
+                        </p>
                       </div>
                     </div>
 
