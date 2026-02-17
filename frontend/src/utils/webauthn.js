@@ -4,7 +4,7 @@
  */
 
 /* eslint-disable no-undef */
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001';
+const BACKEND_URL = process.env.REACT_APP_USER_BACKEND_URL || process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001';
 
 // Check if we're on a devtunnel (development domain)
 const isDevTunnel = () => {

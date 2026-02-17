@@ -43,7 +43,7 @@ const BiometricSetup = ({ onComplete, onSkip }) => {
       let errorMessage = 'Failed to enable biometric authentication';
       
       if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
-        errorMessage = 'Cannot connect to server. Please check your internet connection and ensure the backend is running on http://localhost:8001';
+        errorMessage = 'Cannot connect to server. Please check your internet connection and try again.';
       } else if (err.message.includes('User not authenticated')) {
         errorMessage = 'Please log in first before setting up biometric authentication';
       } else if (err.message.includes('not supported')) {
