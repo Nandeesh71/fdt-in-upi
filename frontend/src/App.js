@@ -9,6 +9,7 @@ import TransactionHistory from './components/TransactionHistory';
 import FraudAlertEnhanced from './components/FraudAlertEnhanced';
 import RiskAnalysis from './components/RiskAnalysis';
 import NotificationPanel from './components/NotificationPanel';
+import BiometricPrompt from './components/BiometricPrompt';
 import { NotificationProvider } from './components/NotificationSystem';
 import cacheManager from './utils/cacheManager';
 import sessionStorage from './utils/sessionStorageManager';
@@ -38,10 +39,11 @@ function AppContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
+  const [showBiometricPrompt, setShowBiometricPrompt] = useState(false);
 
   useEffect(() => {
     // Restore session from storage on app load
-    const restoreSession = () => {
+    const restoreSession = async () => {
       try {
         const token = sessionStorage.getItem('fdt_token');
         const userData = sessionStorage.getItem('fdt_user');
@@ -53,6 +55,12 @@ function AppContent() {
             console.warn('⚠ Token has expired, clearing session');
             sessionStorage.removeItem('fdt_token');
             sessionStorage.removeItem('fdt_user');
+            
+            // Show biometric prompt for re-authentication if credentials exist
+            const hasCredentials = localStorage.getItem('fdt_credentials');
+            if (hasCredentials && JSON.parse(hasCredentials).length > 0) {
+              setShowBiometricPrompt(true);
+            }
             setIsLoading(false);
             return;
           }
@@ -61,6 +69,11 @@ function AppContent() {
           setIsAuthenticated(true);
           console.log('✓ Session restored from storage');
         } else {
+          // No active session - check if user has biometric credentials
+          const hasCredentials = localStorage.getItem('fdt_credentials');
+          if (hasCredentials && JSON.parse(hasCredentials).length > 0) {
+            setShowBiometricPrompt(true);
+          }
           console.log('ℹ No session data found in storage');
         }
       } catch (error) {
@@ -94,6 +107,16 @@ function AppContent() {
     sessionStorage.setItem('fdt_user', userData);
     setUser(userData);
     setIsAuthenticated(true);
+    setShowBiometricPrompt(false);
+  };
+
+  const handleBiometricSuccess = (result) => {
+    console.log('🎉 Biometric login successful:', result);
+    handleLogin(result.user, result.token);
+  };
+
+  const handleBiometricCancel = () => {
+    setShowBiometricPrompt(false);
   };
 
   const handleLogout = () => {
@@ -114,6 +137,14 @@ function AppContent() {
   return (
     <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <div className="min-h-screen bg-gray-50">
+        {/* Biometric Prompt Overlay */}
+        {showBiometricPrompt && !isAuthenticated && (
+          <BiometricPrompt
+            onSuccess={handleBiometricSuccess}
+            onCancel={handleBiometricCancel}
+          />
+        )}
+        
         <Routes>
           <Route
             path="/login"
