@@ -45,10 +45,7 @@ const NotificationPanel = () => {
             <h2 className="text-lg font-semibold text-gray-800">Notifications</h2>
             <div className="flex items-center space-x-2">
               <button
-                onClick={() => {
-                  clearAll();
-                  setShowNotificationPanel(false);
-                }}
+                onClick={clearAll}
                 className="text-sm text-red-600 hover:text-red-700 font-medium"
               >
                 Clear All

@@ -7,6 +7,7 @@ import {
   revokeCredential,
   registerBiometric 
 } from '../utils/webauthn';
+import { formatUPIId } from '../utils/helpers';
 import BiometricSetup from './BiometricSetup';
 
 const ProfileScreen = ({ user }) => {
@@ -23,8 +24,8 @@ const ProfileScreen = ({ user }) => {
   const [loadingBiometric, setLoadingBiometric] = useState(true);
   const [showBiometricSetup, setShowBiometricSetup] = useState(false);
 
-  // Generate UPI ID from phone
-  const upiId = user?.phone ? `${user.phone}@upi` : 'user@upi';
+  // Generate UPI ID from phone - use same formatting as Dashboard
+  const upiId = user?.phone ? formatUPIId(user.phone) : 'user@upi';
 
   useEffect(() => {
     checkBiometricSupport();
