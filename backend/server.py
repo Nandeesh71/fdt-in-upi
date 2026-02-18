@@ -46,8 +46,6 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 from app.upi_transaction_id import generate_upi_transaction_id
 
-from fastapi.middleware.cors import CORSMiddleware
-
 
 
 # Import WebSocket manager
@@ -174,12 +172,6 @@ rate_limiter = RateLimiter(max_requests=100, window_seconds=60)  # 100 requests 
 
 # Initialize FastAPI app and scheduler
 app = FastAPI(title="FDT API", version="1.0.0")
-scheduler = AsyncIOScheduler()
-
-
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy", "service": "fdt-user-backend", "version": "1.0.0"}
 
 app.add_middleware(
     CORSMiddleware,
@@ -193,6 +185,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+scheduler = AsyncIOScheduler()
+
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "service": "fdt-user-backend", "version": "1.0.0"}
 
 # Rate limiting middleware
 @app.middleware("http")
