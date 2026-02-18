@@ -167,7 +167,7 @@ def generate_registration_challenge(
                 "displayName": user_name,
             },
             "pubKeyCredParams": pub_key_params,
-            "timeout": 60000,
+            "timeout": 120000,  # FIX: 2 minutes instead of 1 minute
             "attestation": "direct",
             "authenticatorSelection": {
                 "authenticatorAttachment": "platform",
@@ -267,7 +267,7 @@ def generate_authentication_challenge(
         
         return {
             "challenge": challenge_b64,
-            "timeout": 60000,
+            "timeout": 120000,  # FIX: 2 minutes instead of 1 minute
             "userVerification": "preferred",
         }
     except Exception as e:

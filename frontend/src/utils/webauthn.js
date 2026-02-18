@@ -1,13 +1,11 @@
 /**
  * WebAuthn Utility Functions for Biometric Authentication
- * Handles fingerprint / Face ID enrollment and authentication
+ * User-specific credential management with proper challenge handling
  */
 
 /* eslint-disable no-undef */
-import { getAuthToken } from '../api';
+import { getAuthToken, setAuthToken, setStoredUser, getStoredUser } from '../api';
 
-// FIX: derive the WebSocket / fetch base URL from the same env var that api.js
-//      uses so there is a single source of truth.
 const BACKEND_URL =
   process.env.REACT_APP_USER_BACKEND_URL ||
   process.env.REACT_APP_BACKEND_URL ||
@@ -19,7 +17,6 @@ const isDevTunnel = () =>
   window.location.hostname.includes('localhost') ||
   window.location.hostname === '127.0.0.1';
 
-// WebAuthn doesn't work reliably on devtunnel / localhost on mobile.
 const WEBAUTHN_AVAILABLE = !isDevTunnel();
 
 // ─── Feature Checks ──────────────────────────────────────────────────────────
@@ -47,23 +44,22 @@ export const isPlatformAuthenticatorAvailable = async () => {
 
 // ─── Buffer Helpers ──────────────────────────────────────────────────────────
 const base64urlToBuffer = (base64url) => {
-  const base64  = base64url.replace(/-/g, '+').replace(/_/g, '/');
-  const padLen  = (4 - (base64.length % 4)) % 4;
-  const padded  = base64 + '='.repeat(padLen);
-  const binary  = atob(padded);
-  const bytes   = new Uint8Array(binary.length);
+  const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
+  const padLen = (4 - (base64.length % 4)) % 4;
+  const padded = base64 + '='.repeat(padLen);
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return bytes.buffer;
 };
 
 const bufferToBase64url = (buffer) => {
-  const bytes  = new Uint8Array(buffer);
-  let binary   = '';
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
   for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 };
 
-  // ─── Shared helper: extract readable message from FastAPI error responses ───
 const extractErrorDetail = (error, fallback = 'Request failed') => {
   const detail = error.detail || error.message;
   if (typeof detail === 'string') return detail;
@@ -72,15 +68,63 @@ const extractErrorDetail = (error, fallback = 'Request failed') => {
   return fallback;
 };
 
+// ─── User-Specific Credential Storage ────────────────────────────────────────
+/**
+ * Get the current user's identifier (phone or user_id)
+ */
+const getCurrentUserIdentifier = () => {
+  const user = getStoredUser();
+  return user?.phone || user?.user_id || null;
+};
+
+/**
+ * Get credentials for CURRENT user only
+ */
+const getUserCredentials = () => {
+  const userId = getCurrentUserIdentifier();
+  if (!userId) return [];
+  
+  const allCredentials = JSON.parse(window.sessionStorage.getItem('fdt_credentials') || '{}');
+  return allCredentials[userId] || [];
+};
+
+/**
+ * Save credential for CURRENT user only
+ */
+const saveUserCredential = (credential) => {
+  const userId = getCurrentUserIdentifier();
+  if (!userId) {
+    console.warn('Cannot save credential - no user identifier');
+    return;
+  }
+  
+  const allCredentials = JSON.parse(window.sessionStorage.getItem('fdt_credentials') || '{}');
+  if (!allCredentials[userId]) {
+    allCredentials[userId] = [];
+  }
+  
+  allCredentials[userId].push(credential);
+  window.sessionStorage.setItem('fdt_credentials', JSON.stringify(allCredentials));
+};
+
+/**
+ * Remove credential for CURRENT user only
+ */
+const removeUserCredential = (credentialId) => {
+  const userId = getCurrentUserIdentifier();
+  if (!userId) return;
+  
+  const allCredentials = JSON.parse(window.sessionStorage.getItem('fdt_credentials') || '{}');
+  if (allCredentials[userId]) {
+    allCredentials[userId] = allCredentials[userId].filter(c => c.id !== credentialId);
+    window.sessionStorage.setItem('fdt_credentials', JSON.stringify(allCredentials));
+  }
+};
+
 // ─── Registration ────────────────────────────────────────────────────────────
 /**
- * Register a new biometric credential using the new production endpoint.
- * 
- * Step 1: Get registration options from backend
- * Step 2: Create credential on device
- * Step 3: Send attestation to backend for verification
- * 
- * @param {string|null} deviceName - Optional device name for credential
+ * Register a new biometric credential for the CURRENT user
+ * @param {string|null} deviceName
  * @returns {Promise<Object>}
  */
 export const registerBiometric = async (deviceName = null) => {
@@ -89,19 +133,18 @@ export const registerBiometric = async (deviceName = null) => {
   const available = await isPlatformAuthenticatorAvailable();
   if (!available) throw new Error('No biometric authenticator available on this device');
 
-  // Read token from localStorage via the shared helper from api.js
   const token = getAuthToken();
   console.log('🔐 Token check:', { hasToken: !!token, tokenLength: token?.length });
   if (!token) throw new Error('User not authenticated – please log in again');
 
   try {
-    // Step 1: Get registration options from the new production endpoint
-    console.log('📱 Requesting biometric registration options from:', `${BACKEND_URL}/auth/biometric/register/options`);
+    // Step 1: Get registration options from backend
+    console.log('📱 Requesting biometric registration options...');
     const optionsResponse = await fetch(`${BACKEND_URL}/auth/biometric/register/options`, {
       method: 'POST',
-      headers: { 
-        Authorization: `Bearer ${token}`, 
-        'Content-Type': 'application/json' 
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
       }
     });
 
@@ -117,17 +160,17 @@ export const registerBiometric = async (deviceName = null) => {
 
     console.log('✓ Received registration options with challenge:', options.challenge.substring(0, 20) + '...');
 
-    // Convert challenge and user ID for credential creation
+    // Step 2: Create credential on device (IMMEDIATELY - don't wait)
     const publicKeyOptions = {
       challenge: base64urlToBuffer(options.challenge),
-      rp: { 
-        id: options.rp.id, 
-        name: options.rp.name 
+      rp: {
+        id: options.rp.id,
+        name: options.rp.name
       },
       user: {
         id: new TextEncoder().encode(options.user.id),
         name: options.user.name,
-        displayName: options.user.displayName || options.user.name || 'User',
+        displayName: options.user.displayName || options.user.name || 'User'
       },
       pubKeyCredParams: options.pubKeyCredParams,
       authenticatorSelection: {
@@ -135,12 +178,11 @@ export const registerBiometric = async (deviceName = null) => {
         residentKey: 'preferred',
         userVerification: 'preferred'
       },
-      timeout: options.timeout || 60000,
+      timeout: 120000, // 2 minutes instead of 60 seconds
       attestation: options.attestation || 'direct'
     };
 
-    // Step 2: Create credential on device (shows biometric prompt)
-    console.log('🔐 Requesting biometric credential creation...');
+    console.log('🔐 Requesting biometric credential creation (user will be prompted)...');
     const credential = await navigator.credentials.create({
       publicKey: publicKeyOptions
     });
@@ -149,18 +191,18 @@ export const registerBiometric = async (deviceName = null) => {
       throw new Error('User cancelled biometric registration or credential creation failed');
     }
 
-    console.log('✅ Credential created, credential ID:', bufferToBase64url(credential.id).substring(0, 20) + '...');
+    console.log('✅ Credential created, ID:', bufferToBase64url(credential.rawId).substring(0, 20) + '...');
 
-    // Step 3: Send attestation to backend for verification
+    // Step 3: Verify credential with backend IMMEDIATELY
     console.log('📤 Verifying credential with backend...');
     const verifyResponse = await fetch(`${BACKEND_URL}/auth/biometric/register/verify`, {
       method: 'POST',
-      headers: { 
-        Authorization: `Bearer ${token}`, 
-        'Content-Type': 'application/json' 
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        credential_id: bufferToBase64url(credential.id),
+        credential_id: bufferToBase64url(credential.rawId),
         attestation_object: bufferToBase64url(credential.response.attestationObject),
         client_data_json: bufferToBase64url(credential.response.clientDataJSON),
         device_name: deviceName
@@ -175,14 +217,12 @@ export const registerBiometric = async (deviceName = null) => {
     const result = await verifyResponse.json();
     console.log('✅ Biometric credential registered successfully:', result);
 
-    // Store credential record locally for reference
-    const storedCredentials = JSON.parse(localStorage.getItem('fdt_credentials') || '[]');
-    storedCredentials.push({
-      id: bufferToBase64url(credential.id),
+    // Store credential for THIS USER ONLY (using phone/user_id as key)
+    saveUserCredential({
+      id: bufferToBase64url(credential.rawId),
       name: deviceName || result.device_name,
       created: new Date().toISOString()
     });
-    localStorage.setItem('fdt_credentials', JSON.stringify(storedCredentials));
 
     return result;
   } catch (error) {
@@ -193,19 +233,14 @@ export const registerBiometric = async (deviceName = null) => {
 
 // ─── Authentication ──────────────────────────────────────────────────────────
 /**
- * Authenticate using the new production endpoint.
- * 
- * Step 1: Get authentication challenge from backend
- * Step 2: Request assertion from device (biometric prompt)
- * Step 3: Send assertion to backend for verification
- * 
- * @returns {Promise<Object>} result containing authentication status
+ * Authenticate using biometric for the CURRENT user
+ * @returns {Promise<Object>}
  */
 export const authenticateWithBiometric = async () => {
   if (!isWebAuthnSupported()) throw new Error('WebAuthn is not supported in this browser');
 
   try {
-    // Step 1: Get authentication challenge
+    // Step 1: Get authentication challenge (FRESH challenge each time)
     console.log('📱 Requesting biometric authentication challenge...');
     const challengeResponse = await fetch(`${BACKEND_URL}/auth/biometric/authenticate/options`, {
       method: 'POST',
@@ -222,15 +257,14 @@ export const authenticateWithBiometric = async () => {
 
     console.log('✓ Received authentication challenge:', options.challenge.substring(0, 20) + '...');
 
-    // Convert challenge for assertion
+    // Step 2: Get assertion from device IMMEDIATELY (don't delay)
     const publicKeyOptions = {
       challenge: base64urlToBuffer(options.challenge),
-      timeout: options.timeout || 60000,
+      timeout: 120000, // 2 minutes
       userVerification: options.userVerification || 'preferred',
       mediation: 'optional'
     };
 
-    // Step 2: Request assertion from device (shows biometric prompt)
     console.log('🔐 Requesting biometric authentication (device will prompt)...');
     const assertion = await navigator.credentials.get({
       publicKey: publicKeyOptions
@@ -240,15 +274,15 @@ export const authenticateWithBiometric = async () => {
       throw new Error('User cancelled biometric authentication');
     }
 
-    console.log('✓ Biometric verified, credential ID:', bufferToBase64url(assertion.id).substring(0, 20) + '...');
+    console.log('✓ Biometric verified, credential ID:', bufferToBase64url(assertion.rawId).substring(0, 20) + '...');
 
-    // Step 3: Send assertion to backend for verification
+    // Step 3: Verify assertion with backend IMMEDIATELY (before challenge expires)
     console.log('📤 Verifying assertion with backend...');
     const verifyResponse = await fetch(`${BACKEND_URL}/auth/biometric/authenticate/verify`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        credential_id: bufferToBase64url(assertion.id),
+        credential_id: bufferToBase64url(assertion.rawId),
         authenticator_data: bufferToBase64url(assertion.response.authenticatorData),
         client_data_json: bufferToBase64url(assertion.response.clientDataJSON),
         signature: bufferToBase64url(assertion.response.signature)
@@ -263,6 +297,10 @@ export const authenticateWithBiometric = async () => {
     const result = await verifyResponse.json();
     console.log('✅ Biometric authentication successful');
 
+    // Store token and user via shared helpers
+    if (result.token) setAuthToken(result.token);
+    if (result.user) setStoredUser(result.user);
+
     return result;
   } catch (error) {
     console.error('❌ Biometric authentication failed:', error);
@@ -270,51 +308,46 @@ export const authenticateWithBiometric = async () => {
   }
 };
 
-
 // ─── Credential Helpers ──────────────────────────────────────────────────────
-/** Check if the user has any locally cached credentials */
+/**
+ * Check if CURRENT user has stored credentials
+ */
 export const hasStoredCredentials = () => {
-  // FIX: read from localStorage to match where we now write them
-  const credentials = localStorage.getItem('fdt_credentials');
-  return !!(credentials && JSON.parse(credentials).length > 0);
+  const credentials = getUserCredentials();
+  return credentials.length > 0;
 };
 
 /**
- * Fetch the list of registered credentials from the server.
- * @returns {Promise<Array>}
+ * Get registered credentials for CURRENT user from server
  */
 export const getRegisteredCredentials = async () => {
-  // FIX: use shared helper – was hitting localStorage, finding nothing, and
-  //      throwing 'User not authenticated' even when the user was logged in.
   const token = getAuthToken();
   if (!token) throw new Error('User not authenticated');
 
   console.log('🔑 Fetching registered credentials...');
-  const response = await fetch(`${BACKEND_URL}/api/auth/credentials`, {
-    method:  'GET',
+  const response = await fetch(`${BACKEND_URL}/auth/biometric/credentials`, {
+    method: 'GET',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
   });
 
   console.log('📡 Response status:', response.status);
   if (!response.ok) throw new Error('Failed to fetch credentials');
 
-  const data        = await response.json();
+  const data = await response.json();
   const credentials = data.credentials || [];
   console.log('✅ Loaded', credentials.length, 'credentials');
   return credentials;
 };
 
 /**
- * Revoke a registered credential.
- * @param {string} credentialId
- * @returns {Promise<Object>}
+ * Revoke a credential for CURRENT user
  */
 export const revokeCredential = async (credentialId) => {
   const token = getAuthToken();
   if (!token) throw new Error('User not authenticated');
 
-  const response = await fetch(`${BACKEND_URL}/api/auth/credentials/${encodeURIComponent(credentialId)}`, {
-    method:  'DELETE',
+  const response = await fetch(`${BACKEND_URL}/auth/biometric/credentials/${encodeURIComponent(credentialId)}`, {
+    method: 'DELETE',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
   });
 
@@ -325,9 +358,8 @@ export const revokeCredential = async (credentialId) => {
 
   const result = await response.json();
 
-  // FIX: remove from localStorage to match where we now write them
-  const storedCredentials = JSON.parse(localStorage.getItem('fdt_credentials') || '[]');
-  localStorage.setItem('fdt_credentials', JSON.stringify(storedCredentials.filter(c => c.id !== credentialId)));
+  // Remove from sessionStorage for THIS USER ONLY
+  removeUserCredential(credentialId);
 
   return result;
 };

@@ -7,25 +7,14 @@ const BiometricPrompt = ({ onSuccess, onCancel }) => {
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [error, setError] = useState(null);
   const [isSupported, setIsSupported] = useState(false);
-  const [autoTriggered, setAutoTriggered] = useState(false); // eslint-disable-line no-unused-vars
 
   useEffect(() => {
-    checkSupportAndAutoAuthenticate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    checkSupport();
   }, []);
 
-  const checkSupportAndAutoAuthenticate = async () => {
+  const checkSupport = async () => {
     const available = await isPlatformAuthenticatorAvailable();
     setIsSupported(available);
-    
-    if (available) {
-      // Auto-trigger biometric after a short delay
-      // No phone number needed anymore - JWT is already validated
-      setAutoTriggered(true);
-      setTimeout(() => {
-        handleBiometricAuth();
-      }, 500);
-    }
   };
 
   const handleBiometricAuth = async () => {
@@ -33,23 +22,24 @@ const BiometricPrompt = ({ onSuccess, onCancel }) => {
     setError(null);
 
     try {
-      // Call new production endpoint that doesn't require phone
+      // Call backend immediately - no delays
       const result = await authenticateWithBiometric();
       
       if (onSuccess) {
         onSuccess(result);
       } else {
-        // Fallback navigation
         navigate('/dashboard');
       }
     } catch (err) {
       console.error('Biometric auth error:', err);
       
-      // Safely extract the message string — err may be a plain object or string
+      // Extract message safely
       const errMsg = typeof err === 'string' ? err : (err?.message || '');
       let errorMessage = 'Authentication failed';
       
-      if (errMsg.includes('Failed to fetch') || errMsg.includes('NetworkError')) {
+      if (errMsg.includes('Invalid or expired challenge')) {
+        errorMessage = 'Challenge expired. Please tap "Verify Biometric" again.';
+      } else if (errMsg.includes('Failed to fetch') || errMsg.includes('NetworkError')) {
         errorMessage = 'Cannot connect to server. Please check your connection.';
       } else if (errMsg.includes('not enabled')) {
         errorMessage = 'Biometric login not set up for this account. Please use password.';
@@ -65,7 +55,6 @@ const BiometricPrompt = ({ onSuccess, onCancel }) => {
     }
   };
 
-
   if (!isSupported) {
     return null;
   }
@@ -74,13 +63,13 @@ const BiometricPrompt = ({ onSuccess, onCancel }) => {
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 rounded-3xl shadow-2xl w-full max-w-md p-8 border border-purple-500/30 animate-fade-in">
         <div className="text-center mb-6">
-          <div className="w-20 h-20 mx-auto bg-gradient-to-br from-purple-500 to-indigo-600 rounded-full flex items-center justify-center mb-4 shadow-lg animate-pulse-slow">
+          <div className="w-20 h-20 mx-auto bg-gradient-to-br from-purple-500 to-indigo-600 rounded-full flex items-center justify-center mb-4 shadow-lg">
             <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
           </div>
           <h2 className="text-2xl font-bold text-white mb-2">Welcome Back!</h2>
-          <p className="text-purple-200">Use your fingerprint or face to unlock</p>
+          <p className="text-purple-200">Tap the button below to authenticate</p>
         </div>
 
         <div className="mb-6">
@@ -96,7 +85,7 @@ const BiometricPrompt = ({ onSuccess, onCancel }) => {
             </div>
           ) : (
             <button
-              onClick={() => handleBiometricAuth()}
+              onClick={handleBiometricAuth}
               disabled={isAuthenticating}
               className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white py-4 rounded-lg font-semibold hover:from-purple-700 hover:to-indigo-700 transition duration-200 shadow-lg flex items-center justify-center space-x-3 disabled:opacity-50"
             >
@@ -108,10 +97,12 @@ const BiometricPrompt = ({ onSuccess, onCancel }) => {
           )}
         </div>
 
-
         {error && (
           <div className="bg-red-500/20 border border-red-500/30 text-red-200 px-4 py-3 rounded-lg mb-4">
-            <p className="text-sm">{error}</p>
+            <p className="text-sm font-medium">{error}</p>
+            {error.includes('Challenge expired') && (
+              <p className="text-xs mt-1 text-red-300">The authentication window timed out. Just tap the button again.</p>
+            )}
           </div>
         )}
 
@@ -145,19 +136,6 @@ const BiometricPrompt = ({ onSuccess, onCancel }) => {
 
         .animate-fade-in {
           animation: fade-in 0.3s ease-out;
-        }
-
-        @keyframes pulse-slow {
-          0%, 100% {
-            transform: scale(1);
-          }
-          50% {
-            transform: scale(1.05);
-          }
-        }
-
-        .animate-pulse-slow {
-          animation: pulse-slow 2s ease-in-out infinite;
         }
       `}</style>
     </div>
