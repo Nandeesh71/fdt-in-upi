@@ -5,7 +5,7 @@ import {
   hasStoredCredentials 
 } from '../utils/webauthn';
 
-const BiometricLogin = ({ phone, onSuccess, onFallbackToPassword }) => {
+const BiometricLogin = ({ onSuccess, onFallbackToPassword }) => {
   const [isSupported, setIsSupported] = useState(false);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [error, setError] = useState(null);
@@ -23,16 +23,12 @@ const BiometricLogin = ({ phone, onSuccess, onFallbackToPassword }) => {
   };
 
   const handleBiometricLogin = useCallback(async () => {
-    if (!phone) {
-      setError('Please enter your phone number first');
-      return;
-    }
-
     setIsAuthenticating(true);
     setError(null);
 
     try {
-      const result = await authenticateWithBiometric(phone);
+      // New production endpoint doesn't need phone parameter
+      const result = await authenticateWithBiometric();
       
       if (onSuccess) {
         onSuccess(result);
@@ -40,33 +36,41 @@ const BiometricLogin = ({ phone, onSuccess, onFallbackToPassword }) => {
     } catch (err) {
       console.error('Biometric login error:', err);
       
-      // Check if it's a "not enabled" error
-      if (err.message.includes('not enabled') || err.message.includes('No biometric')) {
-        setError('Biometric login not set up for this account');
+      // Extract message safely
+      const errMsg = typeof err === 'string' ? err : (err?.message || '');
+      let errorMessage = 'Authentication failed';
+      
+      if (errMsg.includes('Failed to fetch') || errMsg.includes('NetworkError')) {
+        errorMessage = 'Cannot connect to server. Please check your connection.';
+      } else if (errMsg.includes('not enabled') || errMsg.includes('No biometric')) {
+        errorMessage = 'Biometric login not set up for this account';
+      } else if (errMsg.includes('cancelled') || errMsg.includes('User cancelled')) {
+        errorMessage = 'Authentication cancelled';
       } else {
-        setError(err.message || 'Fingerprint authentication failed');
+        errorMessage = errMsg || errorMessage;
       }
+      
+      setError(errorMessage);
     } finally {
       setIsAuthenticating(false);
     }
-  }, [phone, onSuccess]);
+  }, [onSuccess]);
 
-  // Auto-trigger biometric if credentials exist and phone is entered (only once when conditions first met)
+  // Auto-trigger if credentials exist (only once)
   const [hasTriggeredAutoLogin, setHasTriggeredAutoLogin] = useState(false);
   
   useEffect(() => {
-    const phoneLength = phone.replace(/\D/g, '').length;
-    if (isSupported && hasCredentials && phoneLength >= 10 && !isAuthenticating && !error && !hasTriggeredAutoLogin) {
+    if (isSupported && hasCredentials && !isAuthenticating && !error && !hasTriggeredAutoLogin) {
       setHasTriggeredAutoLogin(true);
       const timer = setTimeout(() => {
         handleBiometricLogin();
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [phone, isSupported, hasCredentials, isAuthenticating, error, handleBiometricLogin, hasTriggeredAutoLogin]);
+  }, [isSupported, hasCredentials, isAuthenticating, error, handleBiometricLogin, hasTriggeredAutoLogin]);
 
   if (!isSupported) {
-    return null; // Don't show anything if not supported
+    return null;
   }
 
   return (
@@ -79,9 +83,9 @@ const BiometricLogin = ({ phone, onSuccess, onFallbackToPassword }) => {
 
       <button
         onClick={handleBiometricLogin}
-        disabled={isAuthenticating || !phone}
+        disabled={isAuthenticating}
         className={`w-full py-3 px-4 rounded-lg font-semibold transition-all ${
-          isAuthenticating || !phone
+          isAuthenticating
             ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
             : 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:from-indigo-700 hover:to-purple-700 shadow-lg'
         }`}
