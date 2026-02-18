@@ -38,12 +38,13 @@ function base64urlDecode(str) {
  * Check if platform authenticator is available
  */
 async function isPlatformAuthenticatorAvailable() {
-  if (!window.PublicKeyCredential) {
+  if (typeof window === 'undefined' || !window.PublicKeyCredential) {
     console.warn('WebAuthn not supported in this browser');
     return false;
   }
 
   try {
+    // eslint-disable-next-line no-undef
     return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
   } catch (error) {
     console.error('Error checking platform authenticator:', error);
