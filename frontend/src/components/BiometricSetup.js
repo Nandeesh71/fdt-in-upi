@@ -39,17 +39,20 @@ const BiometricSetup = ({ onComplete, onSkip }) => {
     } catch (err) {
       console.error('Enrollment error:', err);
       
-      // Provide specific error messages based on error type
+      // Extract message safely
+      const errMsg = typeof err === 'string' ? err : (err?.message || '');
       let errorMessage = 'Failed to enable biometric authentication';
       
-      if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+      if (errMsg.includes('Failed to fetch') || errMsg.includes('NetworkError')) {
         errorMessage = 'Cannot connect to server. Please check your internet connection and try again.';
-      } else if (err.message.includes('User not authenticated')) {
+      } else if (errMsg.includes('User not authenticated')) {
         errorMessage = 'Please log in first before setting up biometric authentication';
-      } else if (err.message.includes('not supported')) {
+      } else if (errMsg.includes('not supported')) {
         errorMessage = 'Biometric authentication is not supported on this browser or device';
+      } else if (errMsg.includes('cancelled') || errMsg.includes('User cancelled')) {
+        errorMessage = 'Biometric enrollment cancelled';
       } else {
-        errorMessage = err.message || errorMessage;
+        errorMessage = errMsg || errorMessage;
       }
       
       setError(errorMessage);
