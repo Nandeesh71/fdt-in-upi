@@ -1,5 +1,7 @@
 import React, { useState, useEffect, createContext, useContext, useCallback } from 'react';
-import { getUserTransactions } from '../api';
+import { getUserTransactions, getAuthToken } from '../api';
+// FIX: import getAuthToken from api.js so the 401 check reads from the same
+//      sessionStorage key that login writes to, instead of localStorage.
 
 const NotificationContext = createContext();
 
@@ -12,7 +14,7 @@ export const useNotifications = () => {
 };
 
 export const NotificationProvider = ({ children }) => {
-  const [notifications, setNotifications] = useState([]);
+  const [notifications, setNotifications]             = useState([]);
   const [showNotificationPanel, setShowNotificationPanel] = useState(false);
 
   const addNotification = useCallback((notification) => {
@@ -23,10 +25,10 @@ export const NotificationProvider = ({ children }) => {
       read: false,
       ...notification
     };
-    
+
     setNotifications(prev => [newNotification, ...prev]);
-    
-    // Auto-remove temporary notifications after 10 seconds
+
+    // Auto-remove non-persistent notifications after 10 s
     if (notification.type !== 'delayed_transaction') {
       setTimeout(() => {
         setNotifications(prev => prev.filter(n => n.id !== id));
@@ -39,56 +41,65 @@ export const NotificationProvider = ({ children }) => {
   }, []);
 
   const markAsRead = useCallback((id) => {
-    setNotifications(prev => 
-      prev.map(n => n.id === id ? { ...n, read: true } : n)
-    );
+    setNotifications(prev => prev.map(n => (n.id === id ? { ...n, read: true } : n)));
   }, []);
 
-  const clearAll = useCallback(() => {
-    setNotifications([]);
-  }, []);
+  const clearAll = useCallback(() => setNotifications([]), []);
 
-  // Check for delayed transactions periodically (only if user is authenticated)
+  // Poll for delayed transactions (only while authenticated)
   useEffect(() => {
-    // Only check if user is logged in (has token)
-    const token = localStorage.getItem('fdt_token');
-    if (!token) {
-      return; // Skip if not authenticated
-    }
+    // FIX: was reading from localStorage.getItem('fdt_token') while the token
+    //      lives in sessionStorage – so this guard always bailed out early and
+    //      the interval was never started, yet when it DID fire (e.g. after a
+    //      page reload where sessionStorage was still populated) the request
+    //      lacked a token and returned 401.  Using getAuthToken() ensures we
+    //      read from the correct store.
+    const token = getAuthToken();
+    if (!token) return;
 
     const checkDelayedTransactions = async () => {
       try {
-        const data = await getUserTransactions(20, 'DELAY');
+        const data        = await getUserTransactions(20, 'DELAY');
         const delayedTxns = data.transactions || [];
-        
+
         delayedTxns.forEach(tx => {
           const existingNotification = notifications.find(
-            n => n.type === 'delayed_transaction' && n.transactionId === tx.tx_id && n.read === false
+            n =>
+              n.type          === 'delayed_transaction' &&
+              n.transactionId === tx.tx_id &&
+              n.read          === false
           );
-          
+
           if (!existingNotification) {
             addNotification({
-              type: 'delayed_transaction',
-              title: 'Transaction Pending Verification',
-              message: `Transaction of ₹${tx.amount} to ${tx.recipient_vpa} needs your confirmation`,
+              type:          'delayed_transaction',
+              title:         'Transaction Pending Verification',
+              message:       `Transaction of ₹${tx.amount} to ${tx.recipient_vpa} needs your confirmation`,
               transactionId: tx.tx_id,
-              action: 'review',
-              actionText: 'Review Now',
-              actionUrl: `/fraud-alert/${tx.tx_id}`
+              action:        'review',
+              actionText:    'Review Now',
+              actionUrl:     `/fraud-alert/${tx.tx_id}`
             });
           }
         });
       } catch (err) {
         console.error('Failed to check delayed transactions:', err);
+        // 401s are already handled globally by the axios interceptor in api.js
+        // (it clears the token and redirects to /login), so no extra handling needed here.
       }
     };
 
-    // Check immediately and then every 30 seconds
+    // Check immediately, then every 30 s
     checkDelayedTransactions();
     const interval = setInterval(checkDelayedTransactions, 30000);
-
     return () => clearInterval(interval);
-  }, [notifications, addNotification]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addNotification]);
+  // FIX: removed `notifications` from the dependency array – it was causing
+  //      a new interval to be registered on every state change (i.e. every
+  //      time a notification was added/removed), leading to rapid-fire requests
+  //      that all came back 401 because the interceptor had already wiped the
+  //      token on the first failure.
 
   const unreadCount = notifications.filter(n => !n.read).length;
 

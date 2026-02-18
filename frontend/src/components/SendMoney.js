@@ -1,8 +1,9 @@
-import React, { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { createTransaction, searchUsers } from '../api';
 import { useNotifications } from './NotificationSystem';
 import cacheManager from '../utils/cacheManager';
+// eslint-disable-next-line no-unused-vars
 import favoritesManager from '../utils/favoritesManager';
 import errorHandler from '../utils/errorHandler';
 import RecipientDropdown from './RecipientDropdown';
@@ -11,6 +12,7 @@ import FavoritesModal from './FavoritesModal';
 
 const SendMoney = ({ user, setUser, onBack, onLogout }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { addNotification } = useNotifications();
   const [loading, setLoading] = useState(false);
   const [transactionResult, setTransactionResult] = useState(null);
@@ -18,6 +20,7 @@ const SendMoney = ({ user, setUser, onBack, onLogout }) => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [showFavoritesModal, setShowFavoritesModal] = useState(false);
   const [recipientUser, setRecipientUser] = useState(null);
+
   const amountRef = useRef(null);
   const [formData, setFormData] = useState({
     recipient_vpa: '',
@@ -26,44 +29,53 @@ const SendMoney = ({ user, setUser, onBack, onLogout }) => {
   });
   const [error, setError] = useState('');
 
+  // Auto-fill from QR scanner
+  useEffect(() => {
+    if (location.state) {
+      const { recipientPhone, scannedUPI, amount } = location.state;
+      const recipientValue = scannedUPI || (recipientPhone ? `${recipientPhone}@upi` : '');
+      if (recipientValue) {
+        setFormData(prev => ({
+          ...prev,
+          recipient_vpa: recipientValue,
+          amount: amount || ''
+        }));
+        console.log('✓ Auto-filled from QR scan:', recipientValue);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
     setError('');
     setRecipientUser(null);
     setShowDropdown(false);
   };
 
   const handleRecipientChange = async (value) => {
-    setFormData(prev => ({
-      ...prev,
-      recipient_vpa: value
-    }));
+    setFormData(prev => ({ ...prev, recipient_vpa: value }));
     setError('');
     setRecipientUser(null);
-    
-     if (value.length >= 3) {
-       try {
-         const response = await searchUsers(value);
-         if (response.status === 'success') {
-           setSearchResults(response.results);
-           setShowDropdown(true);
-         } else {
-           setSearchResults([]);
-         }
-       } catch (error) {
-         // Silent fail for search - don't show error as user is still typing
-         errorHandler.logError(error, 'Search Users');
-         setSearchResults([]);
-       }
-     } else {
-       setSearchResults([]);
-       setShowDropdown(false);
-     }
-   };
+
+    if (value.length >= 3) {
+      try {
+        const response = await searchUsers(value);
+        if (response.status === 'success') {
+          setSearchResults(response.results);
+          setShowDropdown(true);
+        } else {
+          setSearchResults([]);
+        }
+      } catch (error) {
+        errorHandler.logError(error, 'Search Users');
+        setSearchResults([]);
+      }
+    } else {
+      setSearchResults([]);
+      setShowDropdown(false);
+    }
+  };
 
   const handleRecipientSelect = (user) => {
     setRecipientUser(user);
@@ -85,21 +97,16 @@ const SendMoney = ({ user, setUser, onBack, onLogout }) => {
 
   const handleAmountChange = (e) => {
     const formatted = formatAmount(e.target.value);
-    setFormData(prev => ({
-      ...prev,
-      amount: formatted
-    }));
+    setFormData(prev => ({ ...prev, amount: formatted }));
     setError('');
   };
 
   const validateForm = () => {
-    // Validate recipient
     if (!formData.recipient_vpa) {
       setError('Please enter a recipient UPI ID or phone number');
       return false;
     }
 
-    // Check if it's a phone number or UPI ID and validate accordingly
     const isPhoneNumber = /^\d{10}$/.test(formData.recipient_vpa.replace(/\D/g, ''));
     const isUPI = formData.recipient_vpa.includes('@');
 
@@ -114,70 +121,67 @@ const SendMoney = ({ user, setUser, onBack, onLogout }) => {
       }
     }
 
-    // Validate amount
     if (!formData.amount || parseFloat(formData.amount) <= 0) {
       setError('Please enter a valid amount greater than ₹0');
       return false;
     }
 
     // Balance check disabled for fraud detection demo
-
     return true;
   };
 
-const handleSubmit = async (e) => {
-     e.preventDefault();
-     
-     if (!validateForm()) {
-       return;
-     }
+  const handleSubmit = async (e) => {
+    e.preventDefault();
 
-     setLoading(true);
-     setError('');
-     
-     try {
-       const response = await createTransaction({
-         recipient_vpa: formData.recipient_vpa,
-         amount: parseFloat(formData.amount),
-         remarks: formData.remarks || 'Payment'
-       });
+    if (!validateForm()) {
+      return;
+    }
 
-       // Update user balance only when the transaction is allowed
-       if (response.status === 'success' && response.transaction?.action === 'ALLOW') {
-         const newBalance = user.balance - parseFloat(formData.amount);
-         const updatedUser = { ...user, balance: newBalance };
-         setUser(updatedUser);
-         localStorage.setItem('fdt_user', JSON.stringify(updatedUser));
-       }
+    setLoading(true);
+    setError('');
 
-        // Set transaction result
-        setTransactionResult({
-          status: response.status,
-          transaction: response.transaction,
-          requiresConfirmation: response.requires_confirmation,
-          riskLevel: response.risk_level,
-          receiverUserId: response.receiver_user_id
-        });
+    try {
+      const response = await createTransaction({
+        recipient_vpa: formData.recipient_vpa,
+        amount: parseFloat(formData.amount),
+        remarks: formData.remarks || 'Payment'
+      });
 
-       // Clear cache
-       cacheManager.invalidateCategory('dashboard');
-       cacheManager.invalidateCategory('transactions');
-
-      } catch (err) {
-        // Use error handler for comprehensive error management
-        const errorInfo = errorHandler.handleAPIError(err, 'Create Transaction');
-        setError(errorInfo.message);
-        
-        addNotification({
-          type: 'error',
-          title: errorInfo.title,
-          message: errorInfo.message,
-          category: 'error'
-        });
-      } finally {
-       setLoading(false);
+      // Update user balance only when the transaction is allowed
+      if (response.status === 'success' && response.transaction?.action === 'ALLOW') {
+        const newBalance = user.balance - parseFloat(formData.amount);
+        const updatedUser = { ...user, balance: newBalance };
+        setUser(updatedUser);
+        // ✅ FIX: was localStorage.setItem — now window.sessionStorage
+        window.sessionStorage.setItem('fdt_user', JSON.stringify(updatedUser));
       }
-    };
+
+      // Set transaction result
+      setTransactionResult({
+        status: response.status,
+        transaction: response.transaction,
+        requiresConfirmation: response.requires_confirmation,
+        riskLevel: response.risk_level,
+        receiverUserId: response.receiver_user_id
+      });
+
+      // Clear cache
+      cacheManager.invalidateCategory('dashboard');
+      cacheManager.invalidateCategory('transactions');
+
+    } catch (err) {
+      const errorInfo = errorHandler.handleAPIError(err, 'Create Transaction');
+      setError(errorInfo.message);
+      addNotification({
+        type: 'error',
+        title: errorInfo.title,
+        message: errorInfo.message,
+        category: 'error'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSelectFavorite = (favorite) => {
     setFormData(prev => ({
@@ -190,9 +194,10 @@ const handleSubmit = async (e) => {
     if (amountRef.current && favorite.amount) {
       amountRef.current.focus();
     }
-   };
+  };
 
-   const formatCurrency = (amount) => {
+  // eslint-disable-next-line no-unused-vars
+  const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
       currency: 'INR',
@@ -200,13 +205,13 @@ const handleSubmit = async (e) => {
     }).format(amount);
   };
 
-  // Show transaction result if available
   if (transactionResult) {
     return (
-      <TransactionResult 
+      <TransactionResult
         result={transactionResult}
         onBack={() => setTransactionResult(null)}
         senderUser={user}
+        user={user}
       />
     );
   }
@@ -219,10 +224,10 @@ const handleSubmit = async (e) => {
         <div className="absolute bottom-0 right-0 w-96 h-96 bg-teal-500 rounded-full filter blur-3xl opacity-20 animate-pulse delay-1000"></div>
       </div>
 
-       {/* Header */}
-       <div className="bg-black/20 backdrop-blur-xl border-b border-white/10 text-white p-6">
-         <div className="flex items-center justify-between">
-           <div className="flex items-center">
+      {/* Header */}
+      <div className="bg-black/20 backdrop-blur-xl border-b border-white/10 text-white p-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
             <button
               onClick={() => {
                 if (onLogout) onLogout();
@@ -234,31 +239,31 @@ const handleSubmit = async (e) => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </button>
-           <h1 className="text-2xl font-bold">Send Money</h1>
-           </div>
-           
-           {/* Switch to Fraud Detection */}
-           <button
-             onClick={() => navigate('/dashboard')}
-             className="flex items-center space-x-2 px-4 py-2 bg-purple-600/80 hover:bg-purple-600 text-white rounded-lg transition-colors"
-           >
-             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m7 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-             </svg>
-             <span className="text-sm font-medium">Fraud Detection</span>
-           </button>
-         </div>
-       </div>
+            <h1 className="text-2xl font-bold">Send Money</h1>
+          </div>
+
+          {/* Switch to Fraud Detection */}
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="flex items-center space-x-2 px-4 py-2 bg-purple-600/80 hover:bg-purple-600 text-white rounded-lg transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m7 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="text-sm font-medium">Fraud Detection</span>
+          </button>
+        </div>
+      </div>
 
       {/* Form */}
       <div className="p-6">
         <div className="max-w-md mx-auto">
-           {/* Transaction Form */}
           <form onSubmit={handleSubmit} className="space-y-5">
-             {/* Recipient UPI ID */}
-             <div className="bg-white/10 backdrop-blur-xl rounded-xl p-5 border border-white/20 relative z-10">
-               <label className="text-white/80 text-sm mb-2 block">Recipient</label>
-               <div className="relative">
+
+            {/* Recipient UPI ID */}
+            <div className="bg-white/10 backdrop-blur-xl rounded-xl p-5 border border-white/20 relative z-10">
+              <label className="text-white/80 text-sm mb-2 block">Recipient</label>
+              <div className="relative">
                 <input
                   type="text"
                   name="recipient_vpa"
@@ -269,15 +274,17 @@ const handleSubmit = async (e) => {
                   disabled={loading}
                   autoComplete="off"
                 />
-                
-                <RecipientDropdown
-                  show={showDropdown}
-                  results={searchResults}
-                  onSelect={handleRecipientSelect}
-                  onClose={() => setShowDropdown(false)}
-                />
+
+                {showDropdown && searchResults.length > 0 && (
+                  <RecipientDropdown
+                    show={showDropdown}
+                    results={searchResults}
+                    onSelect={handleRecipientSelect}
+                    onClose={() => setShowDropdown(false)}
+                  />
+                )}
               </div>
-              
+
               {/* Show selected recipient info */}
               {recipientUser && (
                 <div className="mt-3 bg-green-500/20 border border-green-500/30 px-3 py-2 rounded-lg">
@@ -308,28 +315,16 @@ const handleSubmit = async (e) => {
                 disabled={loading}
               />
               <div className="mt-3 flex space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setFormData(prev => ({ ...prev, amount: '500' }))}
-                  className="px-3 py-1 bg-white/20 text-white/80 rounded-lg hover:bg-white/30 text-sm"
-                  disabled={loading}
-                >
+                <button type="button" onClick={() => setFormData(prev => ({ ...prev, amount: '500' }))}
+                  className="px-3 py-1 bg-white/20 text-white/80 rounded-lg hover:bg-white/30 text-sm" disabled={loading}>
                   ₹500
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setFormData(prev => ({ ...prev, amount: '1000' }))}
-                  className="px-3 py-1 bg-white/20 text-white/80 rounded-lg hover:bg-white/30 text-sm"
-                  disabled={loading}
-                >
+                <button type="button" onClick={() => setFormData(prev => ({ ...prev, amount: '1000' }))}
+                  className="px-3 py-1 bg-white/20 text-white/80 rounded-lg hover:bg-white/30 text-sm" disabled={loading}>
                   ₹1,000
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setFormData(prev => ({ ...prev, amount: '5000' }))}
-                  className="px-3 py-1 bg-white/20 text-white/80 rounded-lg hover:bg-white/30 text-sm"
-                  disabled={loading}
-                >
+                <button type="button" onClick={() => setFormData(prev => ({ ...prev, amount: '5000' }))}
+                  className="px-3 py-1 bg-white/20 text-white/80 rounded-lg hover:bg-white/30 text-sm" disabled={loading}>
                   ₹5,000
                 </button>
               </div>
@@ -347,10 +342,9 @@ const handleSubmit = async (e) => {
                 className="w-full bg-white/10 text-white placeholder-white/40 rounded-lg px-4 py-3 border border-white/20 focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-400/50"
                 disabled={loading}
               />
-             </div>
 
               {/* Quick Actions */}
-              <div className="grid grid-cols-1 gap-3">
+              <div className="grid grid-cols-1 gap-3 mt-4">
                 <button
                   type="button"
                   onClick={() => setShowFavoritesModal(true)}
@@ -363,8 +357,9 @@ const handleSubmit = async (e) => {
                   <span>Saved Recipients</span>
                 </button>
               </div>
+            </div>
 
-             {/* Error Message */}
+            {/* Error Message */}
             {error && (
               <div className="bg-red-500/20 backdrop-blur-xl border border-red-500/50 rounded-xl p-4">
                 <div className="flex items-center">
@@ -409,18 +404,18 @@ const handleSubmit = async (e) => {
               </div>
             </div>
           </div>
-         </div>
-       </div>
-       
-       {/* Favorites Modal */}
-       <FavoritesModal
-         isOpen={showFavoritesModal}
-         onClose={() => setShowFavoritesModal(false)}
-         onSelectFavorite={handleSelectFavorite}
-         onAddNew={() => setShowFavoritesModal(false)}
-       />
-     </div>
-   );
- };
- 
- export default SendMoney;
+        </div>
+      </div>
+
+      {/* Favorites Modal */}
+      <FavoritesModal
+        isOpen={showFavoritesModal}
+        onClose={() => setShowFavoritesModal(false)}
+        onSelectFavorite={handleSelectFavorite}
+        onAddNew={() => setShowFavoritesModal(false)}
+      />
+    </div>
+  );
+};
+
+export default SendMoney;

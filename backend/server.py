@@ -46,8 +46,6 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 from app.upi_transaction_id import generate_upi_transaction_id
 
-from fastapi.middleware.cors import CORSMiddleware
-
 
 
 # Import WebSocket manager
@@ -55,6 +53,22 @@ try:
     from backend.ws_manager import ws_manager
 except ImportError:
     from ws_manager import ws_manager
+
+# Import WebAuthn authentication module
+try:
+    from backend.webauthn_auth import (
+        generate_registration_challenge,
+        verify_registration,
+        generate_authentication_challenge,
+        verify_authentication
+    )
+except ImportError:
+    from webauthn_auth import (
+        generate_registration_challenge,
+        verify_registration,
+        generate_authentication_challenge,
+        verify_authentication
+    )
 
 def _fire_ws_event(loop, coro):
     """Schedule a WebSocket coroutine from a sync thread context.
@@ -158,12 +172,6 @@ rate_limiter = RateLimiter(max_requests=100, window_seconds=60)  # 100 requests 
 
 # Initialize FastAPI app and scheduler
 app = FastAPI(title="FDT API", version="1.0.0")
-scheduler = AsyncIOScheduler()
-
-
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy", "service": "fdt-user-backend", "version": "1.0.0"}
 
 app.add_middleware(
     CORSMiddleware,
@@ -177,6 +185,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+scheduler = AsyncIOScheduler()
+
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "service": "fdt-user-backend", "version": "1.0.0"}
 
 # Rate limiting middleware
 @app.middleware("http")
@@ -287,7 +302,37 @@ def startup_event():
             except Exception as e:
                 print(f"Index {index_name} already exists or error: {e}")
         
-        # Step 6: Add new test users
+        # Step 6: Ensure user_credentials table has all required columns
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS user_credentials (
+                credential_id TEXT PRIMARY KEY,
+                user_id VARCHAR(100) REFERENCES users(user_id) ON DELETE CASCADE,
+                public_key TEXT NOT NULL,
+                counter BIGINT DEFAULT 0,
+                device_id VARCHAR(100),
+                credential_name VARCHAR(255),
+                aaguid TEXT,
+                transports TEXT[],
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_used TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                is_active BOOLEAN DEFAULT TRUE
+            )
+        """)
+        # Add credential_name column if table existed without it
+        try:
+            cur.execute("ALTER TABLE user_credentials ADD COLUMN IF NOT EXISTS credential_name VARCHAR(255)")
+        except Exception:
+            pass
+        try:
+            cur.execute("ALTER TABLE user_credentials ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE")
+        except Exception:
+            pass
+        try:
+            cur.execute("ALTER TABLE user_credentials ADD COLUMN IF NOT EXISTS last_used TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+        except Exception:
+            pass
+        
+        # Step 7: Add new test users
         new_users = [
             ('user_004', 'Abishek Kumar', '+919876543219', 'abishek@example.com', 
              '$2b$12$sC4pqNPR0pxSK8.6E4aire4FCKHbWK988MYFODhurkjGs35TPj8i.', 20000.00),
@@ -676,10 +721,291 @@ async def login_user(credentials: UserLogin):
     return await run_in_threadpool(_login)
 
 # ============================================================================
-# API ENDPOINTS - WEBAUTHN BIOMETRIC AUTHENTICATION
+# API ENDPOINTS - JWT VALIDATION
+# ============================================================================
+
+@app.get("/auth/validate")
+async def validate_token(request: Request):
+    """Validate JWT token from Authorization header
+    
+    Used by frontend to check if stored JWT is still valid.
+    Returns 200 if valid, 401 if invalid/expired.
+    """
+    try:
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+        
+        token = auth_header.split(" ")[1]
+        payload = verify_token(token)
+        
+        return {
+            "status": "valid",
+            "user_id": payload.get("user_id"),
+            "exp": payload.get("exp")
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+# ============================================================================
+# API ENDPOINTS - WEBAUTHN BIOMETRIC AUTHENTICATION (Production)
 # ============================================================================
 
 # Pydantic models for WebAuthn
+class BiometricRegisterOptions(BaseModel):
+    challenge: str
+    rp: dict
+    user: dict
+    pubKeyCredParams: list
+    timeout: int
+    attestation: str
+    authenticatorSelection: dict
+
+class BiometricRegisterVerify(BaseModel):
+    credential_id: str  # base64url
+    attestation_object: str  # base64url
+    client_data_json: str  # base64url
+    device_name: Optional[str] = None
+
+class BiometricAuthOptions(BaseModel):
+    challenge: str
+    timeout: int
+    userVerification: str
+
+class BiometricAuthVerify(BaseModel):
+    credential_id: str  # base64url
+    attestator: Optional[str] = None  # Legacy field, kept for backward compatibility
+    authenticator_data: Optional[str] = None  # base64url (preferred field name)
+    client_data_json: str  # base64url
+    signature: str  # base64url
+
+@app.post("/auth/biometric/register/options")
+async def biometric_register_options(user_id: str = Depends(get_current_user)):
+    """
+    Generate WebAuthn registration challenge for biometric enrollment
+    
+    Called after successful password login.
+    Returns challenge and options for client-side credential creation.
+    """
+    def _generate():
+        conn = get_db_conn()
+        try:
+            cur = conn.cursor()
+            
+            # Get user info for registration
+            cur.execute(
+                "SELECT email, name FROM users WHERE user_id = %s AND is_active = TRUE",
+                (user_id,)
+            )
+            user = cur.fetchone()
+            
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+            
+            # Generate registration options using WebAuthn library
+            options = generate_registration_challenge(
+                user_id=user_id,
+                user_email=user["email"],
+                user_name=user["name"],
+                rp_id="fdt-frontend.onrender.com",
+                rp_name="Fraud Detection Tool"
+            )
+            
+            return {
+                "status": "success",
+                "options": options
+            }
+        finally:
+            conn.close()
+    
+    return await run_in_threadpool(_generate)
+
+@app.post("/auth/biometric/register/verify")
+async def biometric_register_verify(
+    verify_data: BiometricRegisterVerify,
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Verify WebAuthn registration attestation and store credential
+    
+    Called after user completes biometric registration on device.
+    Verifies the attestation and stores credential for future authentication.
+    """
+    def _verify():
+        conn = get_db_conn()
+        try:
+            cur = conn.cursor()
+            
+            # Verify registration using WebAuthn library
+            success, result = verify_registration(
+                user_id=user_id,
+                credential_id=verify_data.credential_id,
+                attestation_object=verify_data.attestation_object,
+                client_data_json=verify_data.client_data_json,
+                rp_id="fdt-frontend.onrender.com"
+            )
+            
+            if not success:
+                raise HTTPException(
+                    status_code=400,
+                    detail=result.get("error", "Verification failed")
+                )
+            
+            # Store credential in database
+            device_name = verify_data.device_name or f"Device {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}"
+            
+            cur.execute(
+                """
+                INSERT INTO user_credentials 
+                (credential_id, user_id, public_key, counter, credential_name, created_at, last_used, is_active)
+                VALUES (%s, %s, %s, %s, %s, NOW(), NOW(), TRUE)
+                ON CONFLICT (credential_id) DO UPDATE
+                SET is_active = TRUE
+                RETURNING credential_id, credential_name, created_at
+                """,
+                (
+                    verify_data.credential_id,
+                    user_id,
+                    result["public_key"],
+                    result["sign_count"],
+                    device_name
+                )
+            )
+            
+            credential = cur.fetchone()
+            
+            # Enable fingerprint for user if first credential
+            cur.execute(
+                "SELECT COUNT(*) as count FROM user_credentials WHERE user_id = %s AND is_active = TRUE",
+                (user_id,)
+            )
+            cred_count = cur.fetchone()["count"]
+            
+            if cred_count > 0:
+                cur.execute(
+                    "UPDATE users SET fingerprint_enabled = TRUE WHERE user_id = %s",
+                    (user_id,)
+                )
+            
+            conn.commit()
+            
+            return {
+                "status": "success",
+                "message": "Biometric credential registered successfully",
+                "credential_id": credential["credential_id"],
+                "device_name": credential["credential_name"]
+            }
+        finally:
+            conn.close()
+    
+    return await run_in_threadpool(_verify)
+
+@app.post("/auth/biometric/authenticate/options")
+async def biometric_authenticate_options():
+    """
+    Generate WebAuthn authentication challenge
+    
+    Called when user returns to app with valid JWT.
+    Returns challenge and options for client-side credential assertion.
+    
+    NOTE: This endpoint is public (no JWT required) because it's called
+    before biometric unlock verification.
+    """
+    # Generate authentication options
+    options = generate_authentication_challenge(
+        user_id="",  # Not needed for auth challenge generation
+        rp_id="fdt-frontend.onrender.com"
+    )
+    
+    return {
+        "status": "success",
+        "options": options
+    }
+
+@app.post("/auth/biometric/authenticate/verify")
+async def biometric_authenticate_verify(verify_data: BiometricAuthVerify):
+    """
+    Verify WebAuthn authentication assertion
+    
+    Called after user completes biometric unlock.
+    Verifies the assertion and returns success if valid.
+    
+    NOTE: This endpoint is public but the frontend must already have
+    a valid JWT stored. JWT validation happens at the application level.
+    """
+    def _verify():
+        conn = get_db_conn()
+        try:
+            cur = conn.cursor()
+            
+            # Get credential from database to find user_id and public_key
+            cur.execute(
+                """
+                SELECT uc.user_id, uc.public_key, uc.counter
+                FROM user_credentials uc
+                WHERE uc.credential_id = %s AND uc.is_active = TRUE
+                """,
+                (verify_data.credential_id,)
+            )
+            
+            credential = cur.fetchone()
+            if not credential:
+                raise HTTPException(status_code=401, detail="Invalid credential")
+            
+            user_id = credential["user_id"]
+            
+            # Use authenticator_data if provided, fallback to attestator field
+            authenticator_data = verify_data.authenticator_data or verify_data.attestator
+            if not authenticator_data:
+                raise HTTPException(status_code=400, detail="Missing authenticator data")
+            
+            # Verify authentication using WebAuthn library
+            success, result = verify_authentication(
+                user_id=user_id,
+                credential_id=verify_data.credential_id,
+                authenticator_data=authenticator_data,
+                client_data_json=verify_data.client_data_json,
+                signature=verify_data.signature,
+                public_key=credential["public_key"],
+                current_sign_count=credential["counter"],
+                rp_id="fdt-frontend.onrender.com"
+            )
+            
+            if not success:
+                raise HTTPException(
+                    status_code=401,
+                    detail=result.get("error", "Authentication failed")
+                )
+            
+            # Update sign count in database
+            new_sign_count = result.get("new_sign_count", credential["counter"] + 1)
+            cur.execute(
+                """
+                UPDATE user_credentials 
+                SET counter = %s, last_used = NOW()
+                WHERE credential_id = %s
+                """,
+                (new_sign_count, verify_data.credential_id)
+            )
+            
+            conn.commit()
+            
+            return {
+                "status": "success",
+                "message": "Biometric authentication verified",
+                "user_id": user_id
+            }
+        finally:
+            conn.close()
+    
+    return await run_in_threadpool(_verify)
+
+# ============================================================================
+# API ENDPOINTS - WEBAUTHN CREDENTIAL MANAGEMENT (Legacy - Keep for compatibility)
+# ============================================================================
+
 class WebAuthnRegisterRequest(BaseModel):
     credential_id: str
     public_key: str
@@ -892,7 +1218,7 @@ async def authenticate_credential(auth_data: WebAuthnAuthenticateRequest):
 
 @app.get("/api/auth/credentials")
 async def list_credentials(user_id: str = Depends(get_current_user)):
-    """List all registered credentials for user"""
+    """List all registered and active credentials for user"""
     def _list_credentials():
         conn = get_db_conn()
         try:
@@ -901,7 +1227,7 @@ async def list_credentials(user_id: str = Depends(get_current_user)):
                 """
                 SELECT credential_id, device_name, transports, created_at, last_used
                 FROM user_credentials
-                WHERE user_id = %s
+                WHERE user_id = %s AND is_active = TRUE
                 ORDER BY created_at DESC
                 """,
                 (user_id,)
@@ -1036,6 +1362,80 @@ async def get_user_dashboard(user_id: str = Depends(get_current_user)):
             conn.close()
     
     return await run_in_threadpool(_get_dashboard)
+
+@app.get("/api/user/profile")
+async def get_user_profile(user_id: str = Depends(get_current_user)):
+    """Get user profile information"""
+    def _get_profile():
+        conn = get_db_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT user_id, name, phone, email, balance, created_at FROM users WHERE user_id = %s",
+                (user_id,)
+            )
+            user = cur.fetchone()
+            
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+            
+            user_dict = dict(user)
+            user_dict["upi_id"] = f"{user_dict['phone'].replace('+91', '').replace('+', '')}@fdt"
+            
+            return {
+                "status": "success",
+                "user": dict_to_json_serializable(user_dict)
+            }
+        finally:
+            conn.close()
+    
+    return await run_in_threadpool(_get_profile)
+
+@app.put("/api/user/profile")
+async def update_user_profile(
+    profile_data: dict,
+    user_id: str = Depends(get_current_user)
+):
+    """Update user profile (only name can be changed, phone is read-only)"""
+    def _update_profile():
+        conn = get_db_conn()
+        try:
+            cur = conn.cursor()
+            
+            # Only allow updating name
+            if "name" not in profile_data:
+                raise HTTPException(status_code=400, detail="No valid fields to update")
+            
+            name = profile_data.get("name", "").strip()
+            if not name:
+                raise HTTPException(status_code=400, detail="Name cannot be empty")
+            
+            # Update the name
+            cur.execute(
+                "UPDATE users SET name = %s WHERE user_id = %s",
+                (name, user_id)
+            )
+            conn.commit()
+            
+            # Get updated user
+            cur.execute(
+                "SELECT user_id, name, phone, email, balance, created_at FROM users WHERE user_id = %s",
+                (user_id,)
+            )
+            user = cur.fetchone()
+            
+            user_dict = dict(user)
+            user_dict["upi_id"] = f"{user_dict['phone'].replace('+91', '').replace('+', '')}@fdt"
+            
+            return {
+                "status": "success",
+                "message": "Profile updated successfully",
+                "user": dict_to_json_serializable(user_dict)
+            }
+        finally:
+            conn.close()
+    
+    return await run_in_threadpool(_update_profile)
 
 # ============================================================================
 # API ENDPOINTS - TRANSACTIONS
@@ -1585,20 +1985,26 @@ async def get_user_transactions(
     limit: int = 20,
     status_filter: Optional[str] = None
 ):
-    """Get user transaction history with optional filtering"""
+    """Get user transaction history with optional filtering - includes both sent and received transactions"""
     def _get_transactions():
         conn = get_db_conn()
         try:
             cur = conn.cursor()
             
-            # Optimized query - avoid LEFT JOIN, fetch fraud_alerts separately only when needed
+            # Query to get both sent and received transactions with transaction type
             query = """
-                SELECT tx_id, amount, recipient_vpa, tx_type, action, risk_score, 
-                       db_status, remarks, created_at
+                SELECT 
+                    tx_id, amount, recipient_vpa, tx_type, action, risk_score, 
+                    db_status, remarks, created_at, user_id, receiver_user_id,
+                    CASE 
+                        WHEN user_id = %s THEN 'sent'
+                        WHEN receiver_user_id = %s THEN 'received'
+                        ELSE 'unknown'
+                    END as transaction_direction
                 FROM transactions
-                WHERE user_id = %s
+                WHERE user_id = %s OR receiver_user_id = %s
             """
-            params = [user_id]
+            params = [user_id, user_id, user_id, user_id]
             
             if status_filter:
                 query += " AND action = %s"
@@ -1610,19 +2016,34 @@ async def get_user_transactions(
             cur.execute(query, params)
             transactions = cur.fetchall()
             
-            # Fetch fraud_alerts for all transactions in a single query (faster than LEFT JOIN)
+            # Fetch sender info for received transactions and fraud_alerts for all transactions
             if transactions:
                 tx_ids = [tx['tx_id'] for tx in transactions]
                 placeholders = ','.join(['%s'] * len(tx_ids))
+                
+                # Get fraud alerts
                 cur.execute(
                     f"SELECT tx_id, reason FROM fraud_alerts WHERE tx_id IN ({placeholders})",
                     tx_ids
                 )
                 fraud_alerts_map = {row['tx_id']: row['reason'] for row in cur.fetchall()}
+                
+                # Get sender information for received transactions
+                sender_ids = [tx['user_id'] for tx in transactions if tx.get('transaction_direction') == 'received' and tx['user_id']]
+                if sender_ids:
+                    sender_placeholders = ','.join(['%s'] * len(sender_ids))
+                    cur.execute(
+                        f"SELECT user_id, name, phone FROM users WHERE user_id IN ({sender_placeholders})",
+                        sender_ids
+                    )
+                    sender_info_map = {row['user_id']: {'name': row['name'], 'phone': row['phone']} for row in cur.fetchall()}
+                else:
+                    sender_info_map = {}
             else:
                 fraud_alerts_map = {}
+                sender_info_map = {}
             
-            # Process transactions to add fraud reasons and risk_level
+            # Process transactions to add fraud reasons, risk_level, and sender info
             processed_transactions = []
             delay_threshold = 0.35
             block_threshold = 0.70
@@ -1643,6 +2064,13 @@ async def get_user_transactions(
                     tx_dict["risk_level"] = "DELAYED"
                 else:
                     tx_dict["risk_level"] = "APPROVED"
+                
+                # Add sender information for received transactions
+                if tx_dict.get('transaction_direction') == 'received' and tx_dict.get('user_id'):
+                    sender_info = sender_info_map.get(tx_dict['user_id'])
+                    if sender_info:
+                        tx_dict["sender_name"] = sender_info['name']
+                        tx_dict["sender_phone"] = sender_info['phone']
                 
                 processed_transactions.append(tx_dict)
             
