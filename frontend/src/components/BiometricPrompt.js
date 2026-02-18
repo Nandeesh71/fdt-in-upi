@@ -7,7 +7,7 @@ const BiometricPrompt = ({ onSuccess, onCancel }) => {
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [error, setError] = useState(null);
   const [isSupported, setIsSupported] = useState(false);
-  const [autoTriggered, setAutoTriggered] = useState(false); // eslint-disable-line no-unused-vars
+  const [autoTriggered, setAutoTriggered] = useState(false);
 
   useEffect(() => {
     checkSupportAndAutoAuthenticate();
@@ -18,9 +18,7 @@ const BiometricPrompt = ({ onSuccess, onCancel }) => {
     const available = await isPlatformAuthenticatorAvailable();
     setIsSupported(available);
     
-    if (available) {
-      // Auto-trigger biometric after a short delay
-      // No phone number needed anymore - JWT is already validated
+    if (available && !autoTriggered) {
       setAutoTriggered(true);
       setTimeout(() => {
         handleBiometricAuth();
@@ -33,19 +31,18 @@ const BiometricPrompt = ({ onSuccess, onCancel }) => {
     setError(null);
 
     try {
-      // Call new production endpoint that doesn't require phone
+      // New production endpoint doesn't require phone parameter
       const result = await authenticateWithBiometric();
       
       if (onSuccess) {
         onSuccess(result);
       } else {
-        // Fallback navigation
         navigate('/dashboard');
       }
     } catch (err) {
       console.error('Biometric auth error:', err);
       
-      // Safely extract the message string — err may be a plain object or string
+      // Extract message safely
       const errMsg = typeof err === 'string' ? err : (err?.message || '');
       let errorMessage = 'Authentication failed';
       
@@ -64,7 +61,6 @@ const BiometricPrompt = ({ onSuccess, onCancel }) => {
       setIsAuthenticating(false);
     }
   };
-
 
   if (!isSupported) {
     return null;
@@ -107,7 +103,6 @@ const BiometricPrompt = ({ onSuccess, onCancel }) => {
             </button>
           )}
         </div>
-
 
         {error && (
           <div className="bg-red-500/20 border border-red-500/30 text-red-200 px-4 py-3 rounded-lg mb-4">
