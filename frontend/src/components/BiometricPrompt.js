@@ -22,7 +22,7 @@ const BiometricPrompt = ({ onSuccess, onCancel }) => {
     setError(null);
 
     try {
-      // Call backend immediately - no delays
+      // Call backend
       const result = await authenticateWithBiometric();
       
       if (onSuccess) {
@@ -36,20 +36,31 @@ const BiometricPrompt = ({ onSuccess, onCancel }) => {
       // Extract message safely
       const errMsg = typeof err === 'string' ? err : (err?.message || '');
       let errorMessage = 'Authentication failed';
+      let isRetryable = true;
       
-      if (errMsg.includes('Invalid or expired challenge')) {
-        errorMessage = 'Challenge expired. Please tap "Verify Biometric" again.';
-      } else if (errMsg.includes('Failed to fetch') || errMsg.includes('NetworkError')) {
-        errorMessage = 'Cannot connect to server. Please check your connection.';
-      } else if (errMsg.includes('not enabled')) {
-        errorMessage = 'Biometric login not set up for this account. Please use password.';
-      } else if (errMsg.includes('User cancelled') || errMsg.includes('cancelled')) {
-        errorMessage = 'Authentication cancelled';
+      // Map errors to user-friendly messages
+      if (errMsg.includes('Too many failed attempts')) {
+        errorMessage = errMsg;
+        isRetryable = false;
+      } else if (errMsg.includes('expired') || errMsg.includes('timeout')) {
+        errorMessage = 'Authentication timeout. Please try again.';
+      } else if (errMsg.includes('Network') || errMsg.includes('connect')) {
+        errorMessage = 'Network connection error. Check your internet and try again.';
+      } else if (errMsg.includes('not available')) {
+        errorMessage = 'Biometric authentication not available on this device.';
+        isRetryable = false;
+      } else if (errMsg.includes('cancelled')) {
+        errorMessage = 'Authentication cancelled by user';
       } else {
         errorMessage = errMsg || errorMessage;
       }
       
       setError(errorMessage);
+      
+      // Disable retrying if not applicable
+      if (!isRetryable) {
+        setIsAuthenticating(true); // Disable button
+      }
     } finally {
       setIsAuthenticating(false);
     }
@@ -100,8 +111,17 @@ const BiometricPrompt = ({ onSuccess, onCancel }) => {
         {error && (
           <div className="bg-red-500/20 border border-red-500/30 text-red-200 px-4 py-3 rounded-lg mb-4">
             <p className="text-sm font-medium">{error}</p>
-            {error.includes('Challenge expired') && (
-              <p className="text-xs mt-1 text-red-300">The authentication window timed out. Just tap the button again.</p>
+            {error.includes('timeout') && (
+              <p className="text-xs mt-1 text-red-300">The authentication window timed out. Tap the button to try again.</p>
+            )}
+            {error.includes('Network') && (
+              <p className="text-xs mt-1 text-red-300">Check your internet connection and try again.</p>
+            )}
+            {error.includes('Too many failed') && (
+              <p className="text-xs mt-1 text-red-300">Your account is temporarily locked for security. Please try again later or use password login.</p>
+            )}
+            {error.includes('not available') && (
+              <p className="text-xs mt-1 text-red-300">Please use password login instead.</p>
             )}
           </div>
         )}

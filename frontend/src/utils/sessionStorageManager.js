@@ -93,6 +93,7 @@ class SessionStorageManager {
   /**
    * Clear all FDT session data
    * ✅ FIX: clears from window.sessionStorage (was localStorage)
+   * Note: fdt_credentials is stored in localStorage for persistence
    */
   clear() {
     try {
@@ -100,10 +101,11 @@ class SessionStorageManager {
         window.sessionStorage.removeItem('fdt_token');
         window.sessionStorage.removeItem('fdt_user');
         window.sessionStorage.removeItem('fdt_user_id');
-        window.sessionStorage.removeItem('fdt_credentials');
       } else {
         this.memoryData = {};
       }
+      // Always clear credentials from localStorage for consistency
+      window.localStorage.removeItem('fdt_credentials');
     } catch (error) {
       console.error('❌ Failed to clear session data:', error);
     }

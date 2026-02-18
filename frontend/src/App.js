@@ -10,6 +10,7 @@ import FraudAlertEnhanced from './components/FraudAlertEnhanced';
 import RiskAnalysis from './components/RiskAnalysis';
 import NotificationPanel from './components/NotificationPanel';
 import BiometricPrompt from './components/BiometricPrompt';
+import PasswordVerificationPrompt from './components/PasswordVerificationPrompt';
 import ProfileScreen from './components/ProfileScreen';
 import QRScanner from './components/QRScanner';
 import { NotificationProvider } from './components/NotificationSystem';
@@ -44,6 +45,7 @@ function AppContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
   const [showBiometricPrompt, setShowBiometricPrompt] = useState(false);
+  const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
   const [requireBiometricAuth, setRequireBiometricAuth] = useState(false);
 
   useEffect(() => {
@@ -169,30 +171,50 @@ function AppContent() {
   const handleBiometricSuccess = (result) => {
     console.log('🎉 Biometric verification successful:', result);
     // Biometric verify is a lock-screen check — the JWT is already valid in localStorage.
-    // Restore user/token from storage instead of expecting them from the verify endpoint.
-    const storedToken = localStorage.getItem('fdt_token');
-    const storedUser  = JSON.parse(localStorage.getItem('fdt_user') || 'null');
+    // Restore user/token from storage or from the verify response
+    const storedToken = result?.token || localStorage.getItem('fdt_token');
+    const storedUser  = result?.user ? result.user : JSON.parse(localStorage.getItem('fdt_user') || 'null');
+    
     if (storedToken && storedUser) {
       setUser(storedUser);
       setIsAuthenticated(true);
+    } else {
+      console.warn('⚠️ No token/user after biometric success');
+      setShowBiometricPrompt(false);
     }
     setShowBiometricPrompt(false);
     setRequireBiometricAuth(false);
   };
 
   const handleBiometricCancel = () => {
-    // "Use Password Instead" — bypass biometric lock screen and restore existing session.
-    // The JWT in localStorage is already validated (non-expired), so it's safe to proceed.
-    console.log('ℹ️ User skipped biometric, restoring session from localStorage');
+    // User clicked "Use Password Instead" - show password verification
+    console.log('ℹ️ User requested password verification instead of biometric');
     setShowBiometricPrompt(false);
-    setRequireBiometricAuth(false);
+    setShowPasswordPrompt(true);
+  };
 
-    const storedToken = localStorage.getItem('fdt_token');
-    const storedUser  = JSON.parse(localStorage.getItem('fdt_user') || 'null');
-    if (storedToken && storedUser) {
-      setUser(storedUser);
+  const handlePasswordVerificationSuccess = (result) => {
+    console.log('✅ Password verification successful');
+    setShowPasswordPrompt(false);
+    setRequireBiometricAuth(false);
+    
+    // Get user from result or localStorage
+    const userData = result?.user || JSON.parse(localStorage.getItem('fdt_user') || 'null');
+    
+    if (userData) {
+      setUser(userData);
       setIsAuthenticated(true);
+    } else {
+      console.warn('⚠️ No user data after password verification');
+      handleLogout();
     }
+  };
+
+  const handlePasswordVerificationCancel = () => {
+    // User wants to go back to biometric
+    console.log('ℹ️ User returned to biometric prompt');
+    setShowPasswordPrompt(false);
+    setShowBiometricPrompt(true);
   };
 
   const handleLogout = () => {
@@ -220,6 +242,15 @@ function AppContent() {
           <BiometricPrompt
             onSuccess={handleBiometricSuccess}
             onCancel={handleBiometricCancel}
+          />
+        )}
+
+        {/* Password Verification Prompt - Shows when user chooses password over biometric */}
+        {showPasswordPrompt && (
+          <PasswordVerificationPrompt
+            onSuccess={handlePasswordVerificationSuccess}
+            onCancel={handlePasswordVerificationCancel}
+            username={user?.phone || user?.name || 'User'}
           />
         )}
 

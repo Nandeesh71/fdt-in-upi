@@ -1363,6 +1363,64 @@ async def get_user_dashboard(user_id: str = Depends(get_current_user)):
     
     return await run_in_threadpool(_get_dashboard)
 
+@app.post("/api/user/verify-password")
+async def verify_password_endpoint(request: Request, user_id: str = Depends(get_current_user)):
+    """Verify user's password for sensitive operations (biometric bypass, etc)
+    
+    Security features:
+    - Rate limited (rate limiting should be implemented in reverse proxy)
+    - Only for authenticated users
+    - Returns 401 if password is invalid
+    - Returns 400 if no password provided
+    """
+    try:
+        body = await request.json()
+        password = body.get("password", "").strip()
+        
+        if not password:
+            raise HTTPException(status_code=400, detail="Password is required")
+        
+        def _verify():
+            conn = get_db_conn()
+            try:
+                cur = conn.cursor()
+                
+                # Get user's password hash
+                cur.execute(
+                    "SELECT password_hash, name, phone FROM users WHERE user_id = %s AND is_active = TRUE",
+                    (user_id,)
+                )
+                user = cur.fetchone()
+                
+                if not user:
+                    raise HTTPException(status_code=404, detail="User not found")
+                
+                # Verify password
+                if not verify_password(user["password_hash"], password):
+                    raise HTTPException(status_code=401, detail="Invalid password")
+                
+                # Success - return user data
+                return {
+                    "status": "success",
+                    "message": "Password verified successfully",
+                    "user_id": user_id,
+                    "user": {
+                        "user_id": user_id,
+                        "name": user["name"],
+                        "phone": user["phone"]
+                    }
+                }
+            finally:
+                conn.close()
+        
+        return await run_in_threadpool(_verify)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Password verification error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Password verification failed")
+
 @app.get("/api/user/profile")
 async def get_user_profile(user_id: str = Depends(get_current_user)):
     """Get user profile information"""
