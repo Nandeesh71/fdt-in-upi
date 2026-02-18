@@ -206,14 +206,24 @@ def verify_registration(
         if not challenge:
             return False, {"error": "Invalid or expired challenge"}
         
+        # Build the credential dict that py-webauthn expects
+        # (mirrors the shape of navigator.credentials.create() result)
+        credential = {
+            "id": credential_id,
+            "rawId": credential_id,
+            "response": {
+                "attestationObject": attestation_object,
+                "clientDataJSON": client_data_json,
+            },
+            "type": "public-key",
+        }
+        
         # Verify registration
         verification = verify_registration_response(
-            credential_id=base64url_to_bytes(credential_id),
-            attestation_object=base64url_to_bytes(attestation_object),
-            client_data_json=base64url_to_bytes(client_data_json),
-            origin="https://fdt-frontend.onrender.com",
-            rp_id=rp_id,
+            credential=credential,
             expected_challenge=base64url_to_bytes(challenge),
+            expected_rp_id=rp_id,
+            expected_origin="https://fdt-frontend.onrender.com",
         )
         
         # Return credential data for storage
@@ -297,16 +307,26 @@ def verify_authentication(
         if not challenge:
             return False, {"error": "Invalid or expired challenge"}
         
+        # Build the credential dict that py-webauthn expects
+        # (mirrors the shape of navigator.credentials.get() result)
+        credential = {
+            "id": credential_id,
+            "rawId": credential_id,
+            "response": {
+                "authenticatorData": authenticator_data,
+                "clientDataJSON": client_data_json,
+                "signature": signature,
+            },
+            "type": "public-key",
+        }
+        
         # Verify authentication
         verification = verify_authentication_response(
-            credential_id=base64url_to_bytes(credential_id),
-            authenticator_data=base64url_to_bytes(authenticator_data),
-            client_data_json=base64url_to_bytes(client_data_json),
-            signature=base64url_to_bytes(signature),
-            credential_public_key=base64url_to_bytes(public_key),
-            origin="https://fdt-frontend.onrender.com",
-            rp_id=rp_id,
+            credential=credential,
             expected_challenge=base64url_to_bytes(challenge),
+            expected_rp_id=rp_id,
+            expected_origin="https://fdt-frontend.onrender.com",
+            credential_public_key=base64url_to_bytes(public_key),
             credential_current_sign_count=current_sign_count,
         )
         
