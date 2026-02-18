@@ -117,7 +117,7 @@ def generate_registration_challenge(
     
     Args:
         user_id: User identifier
-        user_email: User email for credential
+        user_email: User email (for reference, not passed to WebAuthn)
         user_name: Display name for credential
         rp_id: Relying party ID (domain)
         rp_name: Relying party name
@@ -130,14 +130,12 @@ def generate_registration_challenge(
             rp_id=rp_id,
             rp_name=rp_name,
             user_id=user_id,
-            user_email=user_email,
             user_name=user_name,
             authenticator_selection=AuthenticatorSelectionCriteria(
                 authenticator_attachment="platform",  # Built-in device (fingerprint, face, PIN)
                 resident_key=ResidentKeyRequirement.PREFERRED,
                 user_verification=UserVerificationRequirement.PREFERRED,
             ),
-            supported_alg_ids=[-7, -257],  # ES256 and RS256
         )
         
         # Store challenge for verification
@@ -148,8 +146,7 @@ def generate_registration_challenge(
             "challenge": challenge_str,
             "rp": {"id": rp_id, "name": rp_name},
             "user": {
-                "id": base64url_to_bytes(user_id).hex(),
-                "email": user_email,
+                "id": user_id,
                 "name": user_name,
             },
             "pubKeyCredParams": options.pub_key_cred_params,
@@ -194,7 +191,7 @@ def verify_registration(
         
         # Verify registration
         verification = verify_registration_response(
-            credential=credential_id,
+            credential_id=base64url_to_bytes(credential_id),
             attestation_object=base64url_to_bytes(attestation_object),
             client_data_json=base64url_to_bytes(client_data_json),
             origin="https://fdt-frontend.onrender.com",
@@ -204,7 +201,7 @@ def verify_registration(
         
         # Return credential data for storage
         return True, {
-            "credential_id": bytes_to_base64url(verification.credential_id),
+            "credential_id": credential_id,
             "public_key": bytes_to_base64url(verification.credential_public_key),
             "sign_count": verification.sign_count,
             "counter": verification.sign_count,
