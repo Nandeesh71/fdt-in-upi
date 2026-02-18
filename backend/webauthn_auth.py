@@ -141,18 +141,31 @@ def generate_registration_challenge(
             ),
         )
         
+        # The WebAuthn library returns bytes for challenge – convert to base64url string
+        # so it's JSON-serializable for both Redis storage and the HTTP response.
+        challenge_b64 = bytes_to_base64url(options.challenge) if isinstance(options.challenge, bytes) else options.challenge
+        
         # Store challenge for verification
-        challenge_str = options.challenge
-        store_challenge(user_id, challenge_str, "registration")
+        store_challenge(user_id, challenge_b64, "registration")
+        
+        # Serialize pub_key_cred_params – the library returns typed objects with
+        # enum/bytes fields; convert to plain dicts with string/int values.
+        pub_key_params = []
+        for p in options.pub_key_cred_params:
+            ptype = p.type.value if hasattr(p.type, 'value') else str(p.type)
+            pub_key_params.append({
+                "type": ptype,
+                "alg": p.alg,
+            })
         
         return {
-            "challenge": challenge_str,
+            "challenge": challenge_b64,
             "rp": {"id": rp_id, "name": rp_name},
             "user": {
                 "id": user_id,
                 "name": user_name,
             },
-            "pubKeyCredParams": options.pub_key_cred_params,
+            "pubKeyCredParams": pub_key_params,
             "timeout": 60000,
             "attestation": "direct",
             "authenticatorSelection": {
@@ -235,12 +248,14 @@ def generate_authentication_challenge(
             user_verification=UserVerificationRequirement.PREFERRED,
         )
         
+        # Convert bytes challenge to base64url string for JSON serialization
+        challenge_b64 = bytes_to_base64url(options.challenge) if isinstance(options.challenge, bytes) else options.challenge
+        
         # Store challenge for verification
-        challenge_str = options.challenge
-        store_challenge(user_id, challenge_str, "authentication")
+        store_challenge(user_id, challenge_b64, "authentication")
         
         return {
-            "challenge": challenge_str,
+            "challenge": challenge_b64,
             "timeout": 60000,
             "userVerification": "preferred",
         }
