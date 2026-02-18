@@ -126,10 +126,13 @@ def generate_registration_challenge(
         Registration options dict with challenge
     """
     try:
+        # Convert user_id string to bytes (WebAuthn library requirement)
+        user_id_bytes = user_id.encode('utf-8') if isinstance(user_id, str) else user_id
+        
         options = generate_registration_options(
             rp_id=rp_id,
             rp_name=rp_name,
-            user_id=user_id,
+            user_id=user_id_bytes,
             user_name=user_name,
             authenticator_selection=AuthenticatorSelectionCriteria(
                 authenticator_attachment="platform",  # Built-in device (fingerprint, face, PIN)
