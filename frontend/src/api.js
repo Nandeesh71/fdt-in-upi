@@ -16,26 +16,23 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 // ─── Token Helpers ───────────────────────────────────────────────────────────
-// FIX: Centralise ALL token access here so every module reads/writes the same
-//      key from the same storage layer.  webauthn.js was using localStorage
-//      while api.js was using a sessionStorageManager wrapper – they never
-//      saw each other's tokens.  We now use sessionStorage directly and export
-//      helpers so webauthn.js (and any other file) can import them instead of
-//      calling localStorage / sessionStorage directly.
+// FIX: Use localStorage for JWT so token persists across app restart.
+//      This allows biometric login to work without re-entering credentials.
+//      Centralize token access so all modules use same storage layer.
 
 export const TOKEN_KEY = 'fdt_token';
 export const USER_KEY  = 'fdt_user';
 
-export const getAuthToken  = ()        => sessionStorage.getItem(TOKEN_KEY);
-export const setAuthToken  = (token)   => sessionStorage.setItem(TOKEN_KEY, token);
-export const removeAuthToken = ()      => sessionStorage.removeItem(TOKEN_KEY);
+export const getAuthToken  = ()        => localStorage.getItem(TOKEN_KEY);
+export const setAuthToken  = (token)   => localStorage.setItem(TOKEN_KEY, token);
+export const removeAuthToken = ()      => localStorage.removeItem(TOKEN_KEY);
 
 export const getStoredUser  = ()       => {
-  try { return JSON.parse(sessionStorage.getItem(USER_KEY)); }
+  try { return JSON.parse(localStorage.getItem(USER_KEY)); }
   catch { return null; }
 };
-export const setStoredUser  = (user)   => sessionStorage.setItem(USER_KEY, JSON.stringify(user));
-export const removeStoredUser = ()     => sessionStorage.removeItem(USER_KEY);
+export const setStoredUser  = (user)   => localStorage.setItem(USER_KEY, JSON.stringify(user));
+export const removeStoredUser = ()     => localStorage.removeItem(USER_KEY);
 
 // ─── Axios Instance ──────────────────────────────────────────────────────────
 const api = axios.create({

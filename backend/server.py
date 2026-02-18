@@ -1189,7 +1189,7 @@ async def authenticate_credential(auth_data: WebAuthnAuthenticateRequest):
 
 @app.get("/api/auth/credentials")
 async def list_credentials(user_id: str = Depends(get_current_user)):
-    """List all registered credentials for user"""
+    """List all registered and active credentials for user"""
     def _list_credentials():
         conn = get_db_conn()
         try:
@@ -1198,7 +1198,7 @@ async def list_credentials(user_id: str = Depends(get_current_user)):
                 """
                 SELECT credential_id, device_name, transports, created_at, last_used
                 FROM user_credentials
-                WHERE user_id = %s
+                WHERE user_id = %s AND is_active = TRUE
                 ORDER BY created_at DESC
                 """,
                 (user_id,)
