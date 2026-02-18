@@ -50,6 +50,16 @@ function AppContent() {
     // Restore session from storage on app load
     const restoreSession = async () => {
       try {
+        // ── One-time migration: move tokens from sessionStorage → localStorage ──
+        // Previous deploys stored tokens in sessionStorage which clears on browser close.
+        // Migrate any surviving data so existing sessions aren't lost.
+        ['fdt_token', 'fdt_user', 'fdt_credentials'].forEach(key => {
+          if (!localStorage.getItem(key) && sessionStorage.getItem(key)) {
+            localStorage.setItem(key, sessionStorage.getItem(key));
+            sessionStorage.removeItem(key);
+          }
+        });
+
         // ✅ FIX: use localStorage for token persistence across app restart (biometric unlock)
         const token = localStorage.getItem('fdt_token');
         const userDataRaw = localStorage.getItem('fdt_user');
