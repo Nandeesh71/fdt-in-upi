@@ -76,8 +76,8 @@ const ProfileScreen = ({ user }) => {
 
       const data = await response.json();
       
-      // Update session storage
-      const userData = JSON.parse(sessionStorage.getItem('fdt_user') || '{}');
+      // Update localStorage (for persistence across sessions)
+      const userData = JSON.parse(localStorage.getItem('fdt_user') || '{}');
       userData.name = name;
       setStoredUser(userData);
       

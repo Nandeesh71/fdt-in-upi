@@ -77,10 +77,11 @@ const RegisterScreen = ({ onRegister }) => {
         setRegisteredUser(response.user);
         setRegisteredToken(response.token);
         
-        // IMPORTANT: Save token to sessionStorage before showing BiometricSetup
+        // IMPORTANT: Save token to localStorage before showing BiometricSetup
         // BiometricSetup needs the token to register credentials with the backend
-        sessionStorage.setItem('fdt_token', response.token);
-        sessionStorage.setItem('fdt_user', JSON.stringify(response.user));
+        // Using localStorage ensures token persists across app restarts for future biometric unlocks
+        localStorage.setItem('fdt_token', response.token);
+        localStorage.setItem('fdt_user', JSON.stringify(response.user));
         
         setShowBiometricSetup(true);
       }

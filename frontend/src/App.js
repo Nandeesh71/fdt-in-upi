@@ -14,10 +14,9 @@ import ProfileScreen from './components/ProfileScreen';
 import QRScanner from './components/QRScanner';
 import { NotificationProvider } from './components/NotificationSystem';
 import cacheManager from './utils/cacheManager';
-// ✅ REMOVED: import sessionStorage from './utils/sessionStorageManager';
-// That import was shadowing native sessionStorage, causing api.js (which uses
-// native sessionStorage) to never see the token written here. All storage
-// calls now use window.sessionStorage explicitly to avoid any shadowing.
+// FIX: All storage now uses localStorage for JWT persistence across app restarts
+// This enables biometric unlock - when user closes the app and reopens it,
+// the JWT token is still available so biometric prompt can appear immediately
 
 /**
  * Decode and validate JWT token expiry without verifying signature
@@ -51,10 +50,10 @@ function AppContent() {
     // Restore session from storage on app load
     const restoreSession = async () => {
       try {
-        // ✅ FIX: use window.sessionStorage explicitly (not the imported wrapper)
-        const token = window.sessionStorage.getItem('fdt_token');
-        const userDataRaw = window.sessionStorage.getItem('fdt_user');
-        const hasCredentials = window.sessionStorage.getItem('fdt_credentials');
+        // ✅ FIX: use localStorage for token persistence across app restart (biometric unlock)
+        const token = localStorage.getItem('fdt_token');
+        const userDataRaw = localStorage.getItem('fdt_user');
+        const hasCredentials = localStorage.getItem('fdt_credentials');
         const credentialsArray = hasCredentials ? JSON.parse(hasCredentials) : [];
 
         // Check if user has biometric credentials registered
@@ -72,8 +71,8 @@ function AppContent() {
               userData = JSON.parse(userDataRaw);
             } catch (e) {
               console.error('Failed to parse stored user data:', e);
-              window.sessionStorage.removeItem('fdt_user');
-              window.sessionStorage.removeItem('fdt_token');
+              localStorage.removeItem('fdt_user');
+              localStorage.removeItem('fdt_token');
               setIsLoading(false);
               return;
             }
@@ -82,9 +81,9 @@ function AppContent() {
           // Check if token is expired
           if (isTokenExpired(token)) {
             console.warn('⚠ Token has expired, clearing session');
-            window.sessionStorage.removeItem('fdt_token');
-            window.sessionStorage.removeItem('fdt_user');
-            window.sessionStorage.removeItem('fdt_credentials');
+            localStorage.removeItem('fdt_token');
+            localStorage.removeItem('fdt_user');
+            localStorage.removeItem('fdt_credentials');
             setIsLoading(false);
             return; // Show login screen (no token)
           }
@@ -148,10 +147,10 @@ function AppContent() {
       }
     }
 
-    // ✅ FIX: write to native window.sessionStorage so api.js interceptor
-    //         (which reads window.sessionStorage) can find the token.
-    window.sessionStorage.setItem('fdt_token', token);
-    window.sessionStorage.setItem('fdt_user', JSON.stringify(parsedUser));
+    // ✅ FIX: write to localStorage for persistence across app restarts.
+    //         api.js interceptor reads from localStorage to attach token to requests.
+    localStorage.setItem('fdt_token', token);
+    localStorage.setItem('fdt_user', JSON.stringify(parsedUser));
     setUser(parsedUser);
     setIsAuthenticated(true);
     setShowBiometricPrompt(false);
@@ -184,11 +183,11 @@ function AppContent() {
     // Clear all cache when logging out
     cacheManager.clear();
 
-    // ✅ FIX: clear from native window.sessionStorage
-    window.sessionStorage.removeItem('fdt_token');
-    window.sessionStorage.removeItem('fdt_user');
-    window.sessionStorage.removeItem('fdt_user_id');
-    window.sessionStorage.removeItem('fdt_credentials');
+    // ✅ FIX: clear from localStorage (persistent storage layer)
+    localStorage.removeItem('fdt_token');
+    localStorage.removeItem('fdt_user');
+    localStorage.removeItem('fdt_user_id');
+    localStorage.removeItem('fdt_credentials');
     setUser(null);
     setIsAuthenticated(false);
   };

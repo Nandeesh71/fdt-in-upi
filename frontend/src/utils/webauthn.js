@@ -80,7 +80,7 @@ export const registerBiometric = async (deviceName = null) => {
   const available = await isPlatformAuthenticatorAvailable();
   if (!available) throw new Error('No biometric authenticator available on this device');
 
-  // Read token from sessionStorage via the shared helper from api.js
+  // Read token from localStorage via the shared helper from api.js
   const token = getAuthToken();
   console.log('🔐 Token check:', { hasToken: !!token, tokenLength: token?.length });
   if (!token) throw new Error('User not authenticated – please log in again');
@@ -167,13 +167,13 @@ export const registerBiometric = async (deviceName = null) => {
     console.log('✅ Biometric credential registered successfully:', result);
 
     // Store credential record locally for reference
-    const storedCredentials = JSON.parse(sessionStorage.getItem('fdt_credentials') || '[]');
+    const storedCredentials = JSON.parse(localStorage.getItem('fdt_credentials') || '[]');
     storedCredentials.push({
       id: bufferToBase64url(credential.id),
       name: deviceName || result.device_name,
       created: new Date().toISOString()
     });
-    sessionStorage.setItem('fdt_credentials', JSON.stringify(storedCredentials));
+    localStorage.setItem('fdt_credentials', JSON.stringify(storedCredentials));
 
     return result;
   } catch (error) {
@@ -265,8 +265,8 @@ export const authenticateWithBiometric = async () => {
 // ─── Credential Helpers ──────────────────────────────────────────────────────
 /** Check if the user has any locally cached credentials */
 export const hasStoredCredentials = () => {
-  // FIX: read from sessionStorage to match where we now write them
-  const credentials = sessionStorage.getItem('fdt_credentials');
+  // FIX: read from localStorage to match where we now write them
+  const credentials = localStorage.getItem('fdt_credentials');
   return !!(credentials && JSON.parse(credentials).length > 0);
 };
 
@@ -316,9 +316,9 @@ export const revokeCredential = async (credentialId) => {
 
   const result = await response.json();
 
-  // FIX: remove from sessionStorage to match where we now write them
-  const storedCredentials = JSON.parse(sessionStorage.getItem('fdt_credentials') || '[]');
-  sessionStorage.setItem('fdt_credentials', JSON.stringify(storedCredentials.filter(c => c.id !== credentialId)));
+  // FIX: remove from localStorage to match where we now write them
+  const storedCredentials = JSON.parse(localStorage.getItem('fdt_credentials') || '[]');
+  localStorage.setItem('fdt_credentials', JSON.stringify(storedCredentials.filter(c => c.id !== credentialId)));
 
   return result;
 };
