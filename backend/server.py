@@ -56,6 +56,22 @@ try:
 except ImportError:
     from ws_manager import ws_manager
 
+# Import WebAuthn authentication module
+try:
+    from backend.webauthn_auth import (
+        generate_registration_challenge,
+        verify_registration,
+        generate_authentication_challenge,
+        verify_authentication
+    )
+except ImportError:
+    from webauthn_auth import (
+        generate_registration_challenge,
+        verify_registration,
+        generate_authentication_challenge,
+        verify_authentication
+    )
+
 def _fire_ws_event(loop, coro):
     """Schedule a WebSocket coroutine from a sync thread context.
     
@@ -676,10 +692,291 @@ async def login_user(credentials: UserLogin):
     return await run_in_threadpool(_login)
 
 # ============================================================================
-# API ENDPOINTS - WEBAUTHN BIOMETRIC AUTHENTICATION
+# API ENDPOINTS - JWT VALIDATION
+# ============================================================================
+
+@app.get("/auth/validate")
+async def validate_token(request: Request):
+    """Validate JWT token from Authorization header
+    
+    Used by frontend to check if stored JWT is still valid.
+    Returns 200 if valid, 401 if invalid/expired.
+    """
+    try:
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+        
+        token = auth_header.split(" ")[1]
+        payload = verify_token(token)
+        
+        return {
+            "status": "valid",
+            "user_id": payload.get("user_id"),
+            "exp": payload.get("exp")
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+# ============================================================================
+# API ENDPOINTS - WEBAUTHN BIOMETRIC AUTHENTICATION (Production)
 # ============================================================================
 
 # Pydantic models for WebAuthn
+class BiometricRegisterOptions(BaseModel):
+    challenge: str
+    rp: dict
+    user: dict
+    pubKeyCredParams: list
+    timeout: int
+    attestation: str
+    authenticatorSelection: dict
+
+class BiometricRegisterVerify(BaseModel):
+    credential_id: str  # base64url
+    attestation_object: str  # base64url
+    client_data_json: str  # base64url
+    device_name: Optional[str] = None
+
+class BiometricAuthOptions(BaseModel):
+    challenge: str
+    timeout: int
+    userVerification: str
+
+class BiometricAuthVerify(BaseModel):
+    credential_id: str  # base64url
+    attestator: str  # Should be authenticator_data, keeping for compatibility
+    authenticator_data: Optional[str] = None  # base64url
+    client_data_json: str  # base64url
+    signature: str  # base64url
+
+@app.post("/auth/biometric/register/options")
+async def biometric_register_options(user_id: str = Depends(get_current_user)):
+    """
+    Generate WebAuthn registration challenge for biometric enrollment
+    
+    Called after successful password login.
+    Returns challenge and options for client-side credential creation.
+    """
+    def _generate():
+        conn = get_db_conn()
+        try:
+            cur = conn.cursor()
+            
+            # Get user info for registration
+            cur.execute(
+                "SELECT email, name FROM users WHERE user_id = %s AND is_active = TRUE",
+                (user_id,)
+            )
+            user = cur.fetchone()
+            
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+            
+            # Generate registration options using WebAuthn library
+            options = generate_registration_challenge(
+                user_id=user_id,
+                user_email=user["email"],
+                user_name=user["name"],
+                rp_id="fdt-frontend.onrender.com",
+                rp_name="Fraud Detection Tool"
+            )
+            
+            return {
+                "status": "success",
+                "options": options
+            }
+        finally:
+            conn.close()
+    
+    return await run_in_threadpool(_generate)
+
+@app.post("/auth/biometric/register/verify")
+async def biometric_register_verify(
+    verify_data: BiometricRegisterVerify,
+    user_id: str = Depends(get_current_user)
+):
+    """
+    Verify WebAuthn registration attestation and store credential
+    
+    Called after user completes biometric registration on device.
+    Verifies the attestation and stores credential for future authentication.
+    """
+    def _verify():
+        conn = get_db_conn()
+        try:
+            cur = conn.cursor()
+            
+            # Verify registration using WebAuthn library
+            success, result = verify_registration(
+                user_id=user_id,
+                credential_id=verify_data.credential_id,
+                attestation_object=verify_data.attestation_object,
+                client_data_json=verify_data.client_data_json,
+                rp_id="fdt-frontend.onrender.com"
+            )
+            
+            if not success:
+                raise HTTPException(
+                    status_code=400,
+                    detail=result.get("error", "Verification failed")
+                )
+            
+            # Store credential in database
+            device_name = verify_data.device_name or f"Device {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}"
+            
+            cur.execute(
+                """
+                INSERT INTO user_credentials 
+                (credential_id, user_id, public_key, counter, credential_name, created_at, last_used, is_active)
+                VALUES (%s, %s, %s, %s, %s, NOW(), NOW(), TRUE)
+                ON CONFLICT (credential_id) DO UPDATE
+                SET is_active = TRUE
+                RETURNING credential_id, credential_name, created_at
+                """,
+                (
+                    verify_data.credential_id,
+                    user_id,
+                    result["public_key"],
+                    result["sign_count"],
+                    device_name
+                )
+            )
+            
+            credential = cur.fetchone()
+            
+            # Enable fingerprint for user if first credential
+            cur.execute(
+                "SELECT COUNT(*) as count FROM user_credentials WHERE user_id = %s AND is_active = TRUE",
+                (user_id,)
+            )
+            cred_count = cur.fetchone()["count"]
+            
+            if cred_count > 0:
+                cur.execute(
+                    "UPDATE users SET fingerprint_enabled = TRUE WHERE user_id = %s",
+                    (user_id,)
+                )
+            
+            conn.commit()
+            
+            return {
+                "status": "success",
+                "message": "Biometric credential registered successfully",
+                "credential_id": credential["credential_id"],
+                "device_name": credential["credential_name"]
+            }
+        finally:
+            conn.close()
+    
+    return await run_in_threadpool(_verify)
+
+@app.post("/auth/biometric/authenticate/options")
+async def biometric_authenticate_options():
+    """
+    Generate WebAuthn authentication challenge
+    
+    Called when user returns to app with valid JWT.
+    Returns challenge and options for client-side credential assertion.
+    
+    NOTE: This endpoint is public (no JWT required) because it's called
+    before biometric unlock verification.
+    """
+    # Generate authentication options
+    options = generate_authentication_challenge(
+        user_id="",  # Not needed for auth challenge generation
+        rp_id="fdt-frontend.onrender.com"
+    )
+    
+    return {
+        "status": "success",
+        "options": options
+    }
+
+@app.post("/auth/biometric/authenticate/verify")
+async def biometric_authenticate_verify(verify_data: BiometricAuthVerify):
+    """
+    Verify WebAuthn authentication assertion
+    
+    Called after user completes biometric unlock.
+    Verifies the assertion and returns success if valid.
+    
+    NOTE: This endpoint is public but the frontend must already have
+    a valid JWT stored. JWT validation happens at the application level.
+    """
+    def _verify():
+        conn = get_db_conn()
+        try:
+            cur = conn.cursor()
+            
+            # Get credential from database to find user_id and public_key
+            cur.execute(
+                """
+                SELECT uc.user_id, uc.public_key, uc.counter
+                FROM user_credentials uc
+                WHERE uc.credential_id = %s AND uc.is_active = TRUE
+                """,
+                (verify_data.credential_id,)
+            )
+            
+            credential = cur.fetchone()
+            if not credential:
+                raise HTTPException(status_code=401, detail="Invalid credential")
+            
+            user_id = credential["user_id"]
+            
+            # Use authenticator_data if provided, fallback to attestator field
+            authenticator_data = verify_data.authenticator_data or verify_data.attestator
+            if not authenticator_data:
+                raise HTTPException(status_code=400, detail="Missing authenticator data")
+            
+            # Verify authentication using WebAuthn library
+            success, result = verify_authentication(
+                user_id=user_id,
+                credential_id=verify_data.credential_id,
+                authenticator_data=authenticator_data,
+                client_data_json=verify_data.client_data_json,
+                signature=verify_data.signature,
+                public_key=credential["public_key"],
+                current_sign_count=credential["counter"],
+                rp_id="fdt-frontend.onrender.com"
+            )
+            
+            if not success:
+                raise HTTPException(
+                    status_code=401,
+                    detail=result.get("error", "Authentication failed")
+                )
+            
+            # Update sign count in database
+            new_sign_count = result.get("new_sign_count", credential["counter"] + 1)
+            cur.execute(
+                """
+                UPDATE user_credentials 
+                SET counter = %s, last_used = NOW()
+                WHERE credential_id = %s
+                """,
+                (new_sign_count, verify_data.credential_id)
+            )
+            
+            conn.commit()
+            
+            return {
+                "status": "success",
+                "message": "Biometric authentication verified",
+                "user_id": user_id
+            }
+        finally:
+            conn.close()
+    
+    return await run_in_threadpool(_verify)
+
+# ============================================================================
+# API ENDPOINTS - WEBAUTHN CREDENTIAL MANAGEMENT (Legacy - Keep for compatibility)
+# ============================================================================
+
 class WebAuthnRegisterRequest(BaseModel):
     credential_id: str
     public_key: str

@@ -109,6 +109,33 @@ export const loginUser = async (credentials) => {
   return response.data;
 };
 
+/**
+ * Validate JWT token with backend
+ * 
+ * Called on app load to check if stored JWT is still valid.
+ * Returns {status: 'valid', user_id: ..., exp: ...} if valid
+ * Throws 401 if invalid/expired
+ */
+export const validateToken = async () => {
+  try {
+    const response = await api.get('/auth/validate');
+    return response.data;
+  } catch (error) {
+    // 401 will be caught by the response interceptor, but we can also throw here
+    throw error;
+  }
+};
+
+/**
+ * Logout user by clearing tokens and user data
+ */
+export const logoutUser = async () => {
+  removeAuthToken();
+  removeStoredUser();
+  cacheManager.clear();
+  window.dispatchEvent(new Event('logout'));
+};
+
 // ─── User APIs ───────────────────────────────────────────────────────────────
 export const getUserDashboard = async (forceRefresh = false) => {
   const cacheKey   = 'user_dashboard';
