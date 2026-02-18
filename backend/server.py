@@ -303,7 +303,37 @@ def startup_event():
             except Exception as e:
                 print(f"Index {index_name} already exists or error: {e}")
         
-        # Step 6: Add new test users
+        # Step 6: Ensure user_credentials table has all required columns
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS user_credentials (
+                credential_id TEXT PRIMARY KEY,
+                user_id VARCHAR(100) REFERENCES users(user_id) ON DELETE CASCADE,
+                public_key TEXT NOT NULL,
+                counter BIGINT DEFAULT 0,
+                device_id VARCHAR(100),
+                credential_name VARCHAR(255),
+                aaguid TEXT,
+                transports TEXT[],
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_used TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                is_active BOOLEAN DEFAULT TRUE
+            )
+        """)
+        # Add credential_name column if table existed without it
+        try:
+            cur.execute("ALTER TABLE user_credentials ADD COLUMN IF NOT EXISTS credential_name VARCHAR(255)")
+        except Exception:
+            pass
+        try:
+            cur.execute("ALTER TABLE user_credentials ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE")
+        except Exception:
+            pass
+        try:
+            cur.execute("ALTER TABLE user_credentials ADD COLUMN IF NOT EXISTS last_used TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+        except Exception:
+            pass
+        
+        # Step 7: Add new test users
         new_users = [
             ('user_004', 'Abishek Kumar', '+919876543219', 'abishek@example.com', 
              '$2b$12$sC4pqNPR0pxSK8.6E4aire4FCKHbWK988MYFODhurkjGs35TPj8i.', 20000.00),
