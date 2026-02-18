@@ -1,28 +1,42 @@
+/**
+ * BiometricSetup Component - Updated Version
+ * Modal for registering biometric credentials (fingerprint/face)
+ * Used on user dashboard after login
+ */
+
 import React, { useState, useEffect } from 'react';
-import { 
-  isPlatformAuthenticatorAvailable, 
-  registerBiometric 
-} from '../utils/webauthn';
+import {
+  isPlatformAuthenticatorAvailable,
+  registerBiometricCredential,
+} from '../utils/webauthn_biometric';
 
 const BiometricSetup = ({ onComplete, onSkip }) => {
   const [isSupported, setIsSupported] = useState(false);
   const [isEnrolling, setIsEnrolling] = useState(false);
   const [error, setError] = useState(null);
   const [deviceName, setDeviceName] = useState('');
+  const [checkingSupport, setCheckingSupport] = useState(true);
 
   useEffect(() => {
     checkSupport();
   }, []);
 
   const checkSupport = async () => {
-    const available = await isPlatformAuthenticatorAvailable();
-    setIsSupported(available);
-    
-    if (available) {
-      // Generate default device name
-      const platform = navigator.platform || 'Unknown';
-      const defaultName = `${platform} - ${new Date().toLocaleDateString()}`;
-      setDeviceName(defaultName);
+    try {
+      const available = await isPlatformAuthenticatorAvailable();
+      setIsSupported(available);
+      
+      if (available) {
+        // Generate default device name
+        const now = new Date();
+        const dateStr = now.toLocaleDateString();
+        setDeviceName(`Device - ${dateStr}`);
+      }
+    } catch (err) {
+      console.error('Error checking biometric support:', err);
+      setIsSupported(false);
+    } finally {
+      setCheckingSupport(false);
     }
   };
 
@@ -31,7 +45,10 @@ const BiometricSetup = ({ onComplete, onSkip }) => {
     setError(null);
 
     try {
-      await registerBiometric(deviceName || null);
+      console.log('Starting biometric enrollment...');
+      const result = await registerBiometricCredential(deviceName || 'Registered Device');
+      
+      console.log('Enrollment successful:', result);
       
       if (onComplete) {
         onComplete();
@@ -39,18 +56,20 @@ const BiometricSetup = ({ onComplete, onSkip }) => {
     } catch (err) {
       console.error('Enrollment error:', err);
       
-      // Extract message safely
+      // Parse error message
       const errMsg = typeof err === 'string' ? err : (err?.message || '');
       let errorMessage = 'Failed to enable biometric authentication';
       
       if (errMsg.includes('Failed to fetch') || errMsg.includes('NetworkError')) {
-        errorMessage = 'Cannot connect to server. Please check your internet connection and try again.';
-      } else if (errMsg.includes('User not authenticated')) {
-        errorMessage = 'Please log in first before setting up biometric authentication';
-      } else if (errMsg.includes('not supported')) {
-        errorMessage = 'Biometric authentication is not supported on this browser or device';
-      } else if (errMsg.includes('cancelled') || errMsg.includes('User cancelled')) {
+        errorMessage = 'Cannot connect to server. Please check your internet connection.';
+      } else if (errMsg.includes('not authenticated') || errMsg.includes('No authentication token')) {
+        errorMessage = 'Please log in first before setting up biometric.';
+      } else if (errMsg.includes('cancelled')) {
         errorMessage = 'Biometric enrollment cancelled';
+      } else if (errMsg.includes('not available')) {
+        errorMessage = 'Biometric authentication is not available on this device';
+      } else if (errMsg.includes('timeout')) {
+        errorMessage = 'Registration timed out. Please try again.';
       } else {
         errorMessage = errMsg || errorMessage;
       }
@@ -61,6 +80,17 @@ const BiometricSetup = ({ onComplete, onSkip }) => {
     }
   };
 
+  if (checkingSupport) {
+    return (
+      <div className="max-w-md mx-auto p-6 bg-white rounded-lg shadow-md">
+        <div className="text-center">
+          <div className="animate-spin inline-block h-8 w-8 border-4 border-indigo-600 border-r-transparent rounded-full"></div>
+          <p className="mt-4 text-gray-600">Checking biometric support...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!isSupported) {
     return (
       <div className="max-w-md mx-auto p-6 bg-white rounded-lg shadow-md">
@@ -70,7 +100,7 @@ const BiometricSetup = ({ onComplete, onSkip }) => {
             Biometric Not Available
           </h3>
           <p className="text-gray-600 mb-6">
-            Your device doesn't support fingerprint or Face ID authentication. 
+            Your device doesn't support fingerprint or Face ID authentication.
             You can continue using password login.
           </p>
           <button
@@ -89,10 +119,10 @@ const BiometricSetup = ({ onComplete, onSkip }) => {
       <div className="text-center mb-6">
         <div className="text-6xl mb-4">👆</div>
         <h3 className="text-2xl font-semibold text-gray-800 mb-2">
-          Enable Fingerprint Login
+          Enable Biometric Login
         </h3>
         <p className="text-gray-600">
-          Set up biometric authentication for faster and more secure logins
+          Register your fingerprint or face for faster, secure authentication
         </p>
       </div>
 
@@ -108,25 +138,26 @@ const BiometricSetup = ({ onComplete, onSkip }) => {
             placeholder="e.g., My iPhone, Work Laptop"
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
             disabled={isEnrolling}
+            autoFocus
           />
           <p className="text-xs text-gray-500 mt-1">
-            This helps you identify this device in your security settings
+            Helps you identify this device in security settings
           </p>
         </div>
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-            <p className="text-sm">{error}</p>
+            <p className="text-sm">⚠️ {error}</p>
           </div>
         )}
 
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <h4 className="font-semibold text-blue-900 mb-2">Benefits:</h4>
           <ul className="text-sm text-blue-800 space-y-1">
-            <li>✓ Login in 2 seconds with fingerprint</li>
+            <li>✓ Login in seconds with biometric</li>
             <li>✓ No need to remember passwords</li>
-            <li>✓ More secure than traditional passwords</li>
-            <li>✓ Works offline after initial setup</li>
+            <li>✓ More secure than passwords</li>
+            <li>✓ 12-hour trusted device session</li>
           </ul>
         </div>
 
@@ -145,10 +176,10 @@ const BiometricSetup = ({ onComplete, onSkip }) => {
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
               </svg>
-              Setting up...
+              Registering...
             </span>
           ) : (
-            'Enable Fingerprint Login'
+            'Register Biometric'
           )}
         </button>
 
@@ -161,7 +192,7 @@ const BiometricSetup = ({ onComplete, onSkip }) => {
         </button>
 
         <p className="text-xs text-gray-500 text-center">
-          You can enable this later in Security Settings
+          You can enable biometric later in Security Settings
         </p>
       </div>
     </div>
