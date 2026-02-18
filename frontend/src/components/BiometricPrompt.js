@@ -45,16 +45,18 @@ const BiometricPrompt = ({ onSuccess, onCancel }) => {
     } catch (err) {
       console.error('Biometric auth error:', err);
       
+      // Safely extract the message string — err may be a plain object or string
+      const errMsg = typeof err === 'string' ? err : (err?.message || '');
       let errorMessage = 'Authentication failed';
       
-      if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+      if (errMsg.includes('Failed to fetch') || errMsg.includes('NetworkError')) {
         errorMessage = 'Cannot connect to server. Please check your connection.';
-      } else if (err.message.includes('not enabled')) {
+      } else if (errMsg.includes('not enabled')) {
         errorMessage = 'Biometric login not set up for this account. Please use password.';
-      } else if (err.message.includes('User cancelled') || err.message.includes('cancelled')) {
+      } else if (errMsg.includes('User cancelled') || errMsg.includes('cancelled')) {
         errorMessage = 'Authentication cancelled';
       } else {
-        errorMessage = err.message || errorMessage;
+        errorMessage = errMsg || errorMessage;
       }
       
       setError(errorMessage);

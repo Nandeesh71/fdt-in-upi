@@ -167,26 +167,32 @@ function AppContent() {
   };
 
   const handleBiometricSuccess = (result) => {
-    console.log('🎉 Biometric login successful:', result);
-    handleLogin(result.user, result.token);
+    console.log('🎉 Biometric verification successful:', result);
+    // Biometric verify is a lock-screen check — the JWT is already valid in localStorage.
+    // Restore user/token from storage instead of expecting them from the verify endpoint.
+    const storedToken = localStorage.getItem('fdt_token');
+    const storedUser  = JSON.parse(localStorage.getItem('fdt_user') || 'null');
+    if (storedToken && storedUser) {
+      setUser(storedUser);
+      setIsAuthenticated(true);
+    }
+    setShowBiometricPrompt(false);
     setRequireBiometricAuth(false);
   };
 
   const handleBiometricCancel = () => {
-    // User cancelled biometric prompt
-    // Only keep them forced if they're in the middle of initial registration
-    console.log('❌ User cancelled biometric prompt. requireBiometricAuth:', requireBiometricAuth);
-    
-    if (requireBiometricAuth) {
-      // During mandatory initial registration, don't allow skipping
-      console.warn('⚠ Biometric setup is required to complete registration');
-      // Don't show prompt again immediately - let user try again
-      setShowBiometricPrompt(false);
-      return;
-    }
-    
-    // During normal app use, allow closing biometric prompt
+    // "Use Password Instead" — bypass biometric lock screen and restore existing session.
+    // The JWT in localStorage is already validated (non-expired), so it's safe to proceed.
+    console.log('ℹ️ User skipped biometric, restoring session from localStorage');
     setShowBiometricPrompt(false);
+    setRequireBiometricAuth(false);
+
+    const storedToken = localStorage.getItem('fdt_token');
+    const storedUser  = JSON.parse(localStorage.getItem('fdt_user') || 'null');
+    if (storedToken && storedUser) {
+      setUser(storedUser);
+      setIsAuthenticated(true);
+    }
   };
 
   const handleLogout = () => {

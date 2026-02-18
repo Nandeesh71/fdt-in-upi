@@ -63,6 +63,15 @@ const bufferToBase64url = (buffer) => {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 };
 
+  // ─── Shared helper: extract readable message from FastAPI error responses ───
+const extractErrorDetail = (error, fallback = 'Request failed') => {
+  const detail = error.detail || error.message;
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail))
+    return detail.map(d => d.msg || d.message || JSON.stringify(d)).join(', ');
+  return fallback;
+};
+
 // ─── Registration ────────────────────────────────────────────────────────────
 /**
  * Register a new biometric credential using the new production endpoint.
@@ -160,7 +169,7 @@ export const registerBiometric = async (deviceName = null) => {
 
     if (!verifyResponse.ok) {
       const error = await verifyResponse.json();
-      throw new Error(error.detail || error.message || 'Credential verification failed');
+      throw new Error(extractErrorDetail(error, 'Credential verification failed'));
     }
 
     const result = await verifyResponse.json();
@@ -205,7 +214,7 @@ export const authenticateWithBiometric = async () => {
 
     if (!challengeResponse.ok) {
       const error = await challengeResponse.json();
-      throw new Error(error.detail || 'Failed to get authentication challenge');
+      throw new Error(extractErrorDetail(error, 'Failed to get authentication challenge'));
     }
 
     const challengeData = await challengeResponse.json();
@@ -248,7 +257,7 @@ export const authenticateWithBiometric = async () => {
 
     if (!verifyResponse.ok) {
       const error = await verifyResponse.json();
-      throw new Error(error.detail || 'Authentication verification failed');
+      throw new Error(extractErrorDetail(error, 'Authentication verification failed'));
     }
 
     const result = await verifyResponse.json();
@@ -304,14 +313,14 @@ export const revokeCredential = async (credentialId) => {
   const token = getAuthToken();
   if (!token) throw new Error('User not authenticated');
 
-  const response = await fetch(`${BACKEND_URL}/api/auth/credentials/${credentialId}`, {
+  const response = await fetch(`${BACKEND_URL}/api/auth/credentials/${encodeURIComponent(credentialId)}`, {
     method:  'DELETE',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
   });
 
   if (!response.ok) {
     const error = await response.json();
-    throw new Error(error.detail || 'Failed to revoke credential');
+    throw new Error(extractErrorDetail(error, 'Failed to revoke credential'));
   }
 
   const result = await response.json();

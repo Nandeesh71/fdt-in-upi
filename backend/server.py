@@ -777,8 +777,8 @@ class BiometricAuthOptions(BaseModel):
 
 class BiometricAuthVerify(BaseModel):
     credential_id: str  # base64url
-    attestator: str  # Should be authenticator_data, keeping for compatibility
-    authenticator_data: Optional[str] = None  # base64url
+    attestator: Optional[str] = None  # Legacy field, kept for backward compatibility
+    authenticator_data: Optional[str] = None  # base64url (preferred field name)
     client_data_json: str  # base64url
     signature: str  # base64url
 
