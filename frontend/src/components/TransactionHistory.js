@@ -799,6 +799,7 @@ const TransactionHistory = ({ user }) => {
               const explanation = getExplanation(tx.action, tx.risk_score, tx.fraud_reasons);
               const isExpanded = expandedTransaction === tx.tx_id;
               const isReceived = tx.transaction_direction === 'received';
+              // eslint-disable-next-line no-unused-vars
               const isSent = tx.transaction_direction === 'sent';
               
               return (

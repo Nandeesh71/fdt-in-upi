@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authenticateWithBiometric, isPlatformAuthenticatorAvailable } from '../utils/webauthn';
-import { getStoredUser } from '../api';
 
 const BiometricPrompt = ({ onSuccess, onCancel }) => {
   const navigate = useNavigate();
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [error, setError] = useState(null);
   const [isSupported, setIsSupported] = useState(false);
-  const [autoTriggered, setAutoTriggered] = useState(false);
+  const [autoTriggered, setAutoTriggered] = useState(false); // eslint-disable-line no-unused-vars
 
   useEffect(() => {
     checkSupportAndAutoAuthenticate();

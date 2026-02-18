@@ -5,7 +5,6 @@ import {
   isPlatformAuthenticatorAvailable, 
   getRegisteredCredentials,
   revokeCredential,
-  registerBiometric 
 } from '../utils/webauthn';
 import { getAuthToken, setStoredUser } from '../api';
 import { formatUPIId } from '../utils/helpers';
@@ -74,7 +73,7 @@ const ProfileScreen = ({ user }) => {
         throw new Error('Failed to update profile');
       }
 
-      const data = await response.json();
+      await response.json();
       
       // Update localStorage (for persistence across sessions)
       const userData = JSON.parse(localStorage.getItem('fdt_user') || '{}');

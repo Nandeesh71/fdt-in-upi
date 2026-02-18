@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { createTransaction, searchUsers } from '../api';
 import { useNotifications } from './NotificationSystem';
 import cacheManager from '../utils/cacheManager';
+// eslint-disable-next-line no-unused-vars
 import favoritesManager from '../utils/favoritesManager';
 import errorHandler from '../utils/errorHandler';
 import RecipientDropdown from './RecipientDropdown';
@@ -213,6 +214,7 @@ const handleSubmit = async (e) => {
     }
    };
 
+   // eslint-disable-next-line no-unused-vars
    const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
