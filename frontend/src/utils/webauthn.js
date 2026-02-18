@@ -117,8 +117,8 @@ export const registerBiometric = async (deviceName = null) => {
       },
       user: {
         id: new TextEncoder().encode(options.user.id),
-        email: options.user.email,
-        name: options.user.name
+        name: options.user.name,
+        displayName: options.user.displayName || options.user.name || 'User',
       },
       pubKeyCredParams: options.pubKeyCredParams,
       authenticatorSelection: {

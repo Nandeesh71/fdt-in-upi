@@ -164,6 +164,7 @@ def generate_registration_challenge(
             "user": {
                 "id": user_id,
                 "name": user_name,
+                "displayName": user_name,
             },
             "pubKeyCredParams": pub_key_params,
             "timeout": 60000,
