@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   isPlatformAuthenticatorAvailable, 
   authenticateWithBiometric,
@@ -22,12 +22,12 @@ const BiometricLogin = ({ onSuccess, onFallbackToPassword }) => {
     setHasCredentials(stored);
   };
 
-  const handleBiometricLogin = useCallback(async () => {
+  const handleBiometricLogin = async () => {
     setIsAuthenticating(true);
     setError(null);
 
     try {
-      // New production endpoint doesn't need phone parameter
+      // Call backend immediately - no delays
       const result = await authenticateWithBiometric();
       
       if (onSuccess) {
@@ -40,7 +40,9 @@ const BiometricLogin = ({ onSuccess, onFallbackToPassword }) => {
       const errMsg = typeof err === 'string' ? err : (err?.message || '');
       let errorMessage = 'Authentication failed';
       
-      if (errMsg.includes('Failed to fetch') || errMsg.includes('NetworkError')) {
+      if (errMsg.includes('Invalid or expired challenge')) {
+        errorMessage = 'Challenge expired. Please tap the button again.';
+      } else if (errMsg.includes('Failed to fetch') || errMsg.includes('NetworkError')) {
         errorMessage = 'Cannot connect to server. Please check your connection.';
       } else if (errMsg.includes('not enabled') || errMsg.includes('No biometric')) {
         errorMessage = 'Biometric login not set up for this account';
@@ -54,20 +56,7 @@ const BiometricLogin = ({ onSuccess, onFallbackToPassword }) => {
     } finally {
       setIsAuthenticating(false);
     }
-  }, [onSuccess]);
-
-  // Auto-trigger if credentials exist (only once)
-  const [hasTriggeredAutoLogin, setHasTriggeredAutoLogin] = useState(false);
-  
-  useEffect(() => {
-    if (isSupported && hasCredentials && !isAuthenticating && !error && !hasTriggeredAutoLogin) {
-      setHasTriggeredAutoLogin(true);
-      const timer = setTimeout(() => {
-        handleBiometricLogin();
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [isSupported, hasCredentials, isAuthenticating, error, handleBiometricLogin, hasTriggeredAutoLogin]);
+  };
 
   if (!isSupported) {
     return null;
@@ -77,7 +66,10 @@ const BiometricLogin = ({ onSuccess, onFallbackToPassword }) => {
     <div className="space-y-4">
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-          <p>{error}</p>
+          <p className="font-medium">{error}</p>
+          {error.includes('Challenge expired') && (
+            <p className="text-xs mt-1">Just tap "Login with Fingerprint" again.</p>
+          )}
         </div>
       )}
 
