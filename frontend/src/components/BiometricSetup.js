@@ -7,8 +7,8 @@
 import React, { useState, useEffect } from 'react';
 import {
   isPlatformAuthenticatorAvailable,
-  registerBiometricCredential,
-} from '../utils/webauthn_biometric';
+  registerBiometric,
+} from '../utils/webauthn';
 
 const BiometricSetup = ({ onComplete, onSkip }) => {
   const [isSupported, setIsSupported] = useState(false);
@@ -46,7 +46,7 @@ const BiometricSetup = ({ onComplete, onSkip }) => {
 
     try {
       console.log('Starting biometric enrollment...');
-      const result = await registerBiometricCredential(deviceName || 'Registered Device');
+      const result = await registerBiometric(deviceName || 'Registered Device');
       
       console.log('Enrollment successful:', result);
       

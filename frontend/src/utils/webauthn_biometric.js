@@ -3,7 +3,7 @@
  * Handles WebAuthn operations with production-grade error handling
  */
 
-const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8001';
+const BASE_URL = process.env.REACT_APP_USER_BACKEND_URL || process.env.REACT_APP_BACKEND_URL || process.env.REACT_APP_API_URL || 'http://localhost:8001';
 
 /**
  * Base64URL encode
@@ -62,7 +62,7 @@ async function getRegistrationOptions(deviceName = null) {
       throw new Error('No authentication token. Please log in first.');
     }
 
-    const response = await fetch(`${BASE_URL}/api/biometric/register/options`, {
+    const response = await fetch(`${BASE_URL}/auth/biometric/register/options`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -124,7 +124,7 @@ async function registerBiometricCredential(deviceName = null) {
     }
 
     // Send verification to server
-    const response = await fetch(`${BASE_URL}/api/biometric/register/verify`, {
+    const response = await fetch(`${BASE_URL}/auth/biometric/register/verify`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -157,7 +157,7 @@ async function registerBiometricCredential(deviceName = null) {
  */
 async function getLoginOptions() {
   try {
-    const response = await fetch(`${BASE_URL}/api/biometric/login/options`, {
+    const response = await fetch(`${BASE_URL}/auth/biometric/authenticate/options`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -207,7 +207,7 @@ async function authenticateWithBiometric() {
     }
 
     // Send verification to server
-    const response = await fetch(`${BASE_URL}/api/biometric/login/verify`, {
+    const response = await fetch(`${BASE_URL}/auth/biometric/authenticate/verify`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
