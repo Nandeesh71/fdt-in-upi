@@ -912,10 +912,13 @@ async def biometric_authenticate_options():
     
     NOTE: This endpoint is public (no JWT required) because it's called
     before biometric unlock verification.
+    We use a fixed key "__global__" so verify can find the challenge
+    without knowing the user_id upfront.
     """
-    # Generate authentication options
+    # Generate authentication options using a global key
+    # The verify endpoint will also use this same key to retrieve the challenge
     options = generate_authentication_challenge(
-        user_id="",  # Not needed for auth challenge generation
+        user_id="__global__",
         rp_id="fdt-frontend.onrender.com"
     )
     
@@ -962,8 +965,9 @@ async def biometric_authenticate_verify(verify_data: BiometricAuthVerify):
                 raise HTTPException(status_code=400, detail="Missing authenticator data")
             
             # Verify authentication using WebAuthn library
+            # Use "__global__" key to match what authenticate/options stored
             success, result = verify_authentication(
-                user_id=user_id,
+                user_id="__global__",
                 credential_id=verify_data.credential_id,
                 authenticator_data=authenticator_data,
                 client_data_json=verify_data.client_data_json,

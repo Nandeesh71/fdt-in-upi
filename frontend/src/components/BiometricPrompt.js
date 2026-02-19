@@ -9,12 +9,20 @@ const BiometricPrompt = ({ onSuccess, onCancel }) => {
   const [isSupported, setIsSupported] = useState(false);
 
   useEffect(() => {
-    checkSupport();
+    checkSupportAndAutoTrigger();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const checkSupport = async () => {
+  const checkSupportAndAutoTrigger = async () => {
     const available = await isPlatformAuthenticatorAvailable();
     setIsSupported(available);
+    
+    if (available) {
+      // Auto-trigger biometric after a short delay so the UI renders first
+      setTimeout(() => {
+        handleBiometricAuth();
+      }, 600);
+    }
   };
 
   const handleBiometricAuth = async () => {

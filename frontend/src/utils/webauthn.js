@@ -500,7 +500,7 @@ export const getRegisteredCredentials = async () => {
   if (!token) throw new Error('User not authenticated');
 
   console.log('🔑 Fetching registered credentials...');
-  const response = await fetch(`${BACKEND_URL}/auth/biometric/credentials`, {
+  const response = await fetch(`${BACKEND_URL}/api/auth/credentials`, {
     method: 'GET',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
   });
@@ -521,7 +521,7 @@ export const revokeCredential = async (credentialId) => {
   const token = getAuthToken();
   if (!token) throw new Error('User not authenticated');
 
-  const response = await fetch(`${BACKEND_URL}/auth/biometric/credentials/${encodeURIComponent(credentialId)}`, {
+  const response = await fetch(`${BACKEND_URL}/api/auth/credentials/${encodeURIComponent(credentialId)}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
   });

@@ -66,10 +66,21 @@ function AppContent() {
         const token = localStorage.getItem('fdt_token');
         const userDataRaw = localStorage.getItem('fdt_user');
         const hasCredentials = localStorage.getItem('fdt_credentials');
-        const credentialsArray = hasCredentials ? JSON.parse(hasCredentials) : [];
+        let parsedCreds = hasCredentials ? JSON.parse(hasCredentials) : null;
 
-        // Check if user has biometric credentials registered
-        const hasBiometricCredentials = credentialsArray && credentialsArray.length > 0;
+        // fdt_credentials may be stored as:
+        //   - an array:  [{id, name, created}]  (legacy format)
+        //   - an object: { phone: [{id, name, created}] }  (user-keyed format)
+        // Normalise to a flat boolean check.
+        let hasBiometricCredentials = false;
+        if (Array.isArray(parsedCreds)) {
+          hasBiometricCredentials = parsedCreds.length > 0;
+        } else if (parsedCreds && typeof parsedCreds === 'object') {
+          // Object keyed by phone/user_id — check if any user has credentials
+          hasBiometricCredentials = Object.values(parsedCreds).some(
+            arr => Array.isArray(arr) && arr.length > 0
+          );
+        }
 
         // CORRECT FLOW:
         // 1. Check if we have a valid token first
