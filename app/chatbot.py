@@ -74,6 +74,33 @@ class FraudDetectionChatbot:
         finally:
             conn.close()
     
+    def get_highest_transaction(self, time_range: str = "24h") -> Dict[str, Any]:
+        """Fetch the highest amount transaction in given time range"""
+        conn = self.get_conn()
+        try:
+            # Determine time interval
+            if time_range == "1h":
+                interval = "1 hour"
+            elif time_range == "7d":
+                interval = "7 days"
+            elif time_range == "30d":
+                interval = "30 days"
+            else:
+                interval = "24 hours"
+            
+            cur = conn.cursor()
+            cur.execute(f"""
+                SELECT * FROM public.transactions 
+                WHERE created_at >= NOW() - INTERVAL '{interval}'
+                ORDER BY amount DESC
+                LIMIT 1
+            """)
+            tx = cur.fetchone()
+            cur.close()
+            return dict(tx) if tx else None
+        finally:
+            conn.close()
+    
     def get_analytics_context(self, time_range: str = "24h") -> Dict[str, Any]:
         """Fetch current analytics data from database"""
         conn = self.get_conn()
@@ -375,6 +402,30 @@ EXPLANATION OF ACTION:
    Type: {tx.get('tx_type')} | Channel: {tx.get('channel')}
    Created: {tx.get('created_at')}"""
             
+            # Check if user is asking about highest amount
+            elif any(word in message.lower() for word in ["highest amount", "maximum amount", "largest amount", "biggest transaction"]):
+                highest_tx = self.get_highest_transaction(context.get('time_range', '24h'))
+                if highest_tx:
+                    # Return formatted response directly without AI processing
+                    response = f"""
+━━━ HIGHEST AMOUNT ━━━
+
+Amount: ₹{highest_tx.get('amount', 0):,.2f}
+
+━━━ TRANSACTION DETAILS ━━━
+
+• Transaction ID: {highest_tx.get('tx_id')}
+• User: {highest_tx.get('user_id')}
+• Risk Score: {highest_tx.get('risk_score', 0):.3f}
+• Action: {highest_tx.get('action')}
+• Type: {highest_tx.get('tx_type')}
+• Channel: {highest_tx.get('channel')}
+• Recipient VPA: {highest_tx.get('recipient_vpa', 'N/A')}
+• Created: {highest_tx.get('created_at')}"""
+                    return response.strip()
+                else:
+                    return f"No transactions found in the last {context.get('time_range', '24h')}."
+            
             # Get database schema for complex queries (with error handling)
             schema_text = ""
             try:
@@ -448,6 +499,14 @@ Your role is to:
 9. NEVER mention SQL queries, database queries, or offer to execute queries - just provide the answer based on what you have
 
 CRITICAL: If you have the answer in the analytics data provided, give that answer directly and do NOT mention SQL queries.
+
+FORMATTING INSTRUCTIONS FOR AMOUNT-RELATED QUERIES:
+When user asks about highest amount, lowest amount, or total amounts:
+1. Start with a BOLD decorative header using ━━━ style: ━━━ HIGHEST AMOUNT ━━━
+2. Display the amount prominently using Indian Rupee format (₹X,XXX.XX)
+3. Add transaction details below using bullet points (•)
+4. For multiple transactions, list them clearly with amounts in descending order
+5. Always add blank lines between sections for readability
 
 FORMATTING INSTRUCTIONS:
 - Use decorative section headers like ━━━ SECTION NAME ━━━ (or === SECTION NAME === if needed)
