@@ -16,7 +16,7 @@
     "three": "^0.182.0"
   },
   "scripts": {
-    "postinstall": "node scripts/strip-html5-qrcode-sourcemaps.js",
+    "postinstall": "node ./scripts/strip-html5-qrcode-sourcemaps.js",
     "start": "node --no-deprecation ./node_modules/react-scripts/scripts/start.js",
     "build": "react-scripts build",
     "test": "react-scripts test",

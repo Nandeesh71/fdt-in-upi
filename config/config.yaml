@@ -13,7 +13,6 @@ admin_users:
 - password_hash: $pbkdf2-sha256$29000$UWptzZlzDqGUEqI0JuQ8hw$/JxT5C38CHMU06vhc5/ROa/448NeY/cozO8Kc9ttM1M
   role: Admin
   username: aarthi
-secret_key: qdqBymrlHc4wrM_E2TfifjUjnEsjxh-9NGKCQaecrQw
 thresholds:
   allowMax: 0.45
   block: 0.75

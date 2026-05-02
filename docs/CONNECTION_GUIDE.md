@@ -146,7 +146,7 @@ REACT_APP_FIREBASE_ENABLED=false
 **Key Variables:**
 ```yaml
 db_url: <set in your environment>
-secret_key: qdqBymrlHc4wrM_E2TfifjUjnEsjxh-9NGKCQaecrQw
+secret_key: <set in your environment>
 
 admin_users:
   - username: jerold
