@@ -15,8 +15,8 @@ load_dotenv()
 # Add project root to path to import app modules
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-URL = "http://localhost:8000/transactions"
-DB_URL = os.getenv("DB_URL", "postgresql://fdt:fdtpass@localhost:5432/fdt_db")
+URL = "https://fdt-admin-backend.onrender.com/transactions"
+DB_URL = os.getenv("DB_URL", "").strip()
 
 # Load thresholds from config
 try:

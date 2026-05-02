@@ -10,7 +10,7 @@ load_dotenv()
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-DB_URL = os.getenv("DB_URL") or "postgresql://fdt:fdtpass@127.0.0.1:5433/fdt_db"
+DB_URL = os.getenv("DB_URL", "").strip()
 
 def test_explainability_column():
     """Check if explainability column exists."""

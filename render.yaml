@@ -36,10 +36,6 @@ services:
     healthCheckPath: /health
     autoDeploy: true
     envVars:
-      - key: DB_URL
-        fromDatabase:
-          name: fdt-database
-          property: connectionString
       - key: REDIS_URL
         fromService:
           type: redis
@@ -72,10 +68,6 @@ services:
     healthCheckPath: /health
     autoDeploy: true
     envVars:
-      - key: DB_URL
-        fromDatabase:
-          name: fdt-database
-          property: connectionString
       - key: REDIS_URL
         fromService:
           type: redis
@@ -99,15 +91,4 @@ services:
     region: oregon
     plan: free
     maxmemoryPolicy: allkeys-lru
-    ipAllowList: []
-
-# ==========================================
-# PostgreSQL Database (Free Tier)
-# ==========================================
-databases:
-  - name: fdt-database
-    databaseName: fdt_db
-    user: fdt
-    plan: free
-    region: oregon
     ipAllowList: []

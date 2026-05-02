@@ -14,7 +14,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 load_dotenv()
 
-DB_URL = os.getenv("DB_URL", "postgresql://user:password@host:port/dbname").strip()
+DB_URL = os.getenv("DB_URL", "").strip()
 
 def run_migration():
     """Run the database migration for Send Money feature"""

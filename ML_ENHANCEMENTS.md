@@ -195,7 +195,7 @@ final_risk = 0.6 × ml_risk + 0.4 × graph_risk
 ### Environment Variables
 ```bash
 # Database
-DB_URL=postgresql://fdt:fdtpass@127.0.0.1:5432/fdt_db
+DB_URL=<set in your environment>
 
 # Redis
 REDIS_URL=redis://localhost:6379/0

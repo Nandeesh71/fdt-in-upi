@@ -46,7 +46,6 @@ function AppContent() {
   const [user, setUser] = useState(null);
   const [showBiometricPrompt, setShowBiometricPrompt] = useState(false);
   const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
-  const [requireBiometricAuth, setRequireBiometricAuth] = useState(false);
 
   useEffect(() => {
     // Restore session from storage on app load
@@ -116,7 +115,6 @@ function AppContent() {
           if (hasBiometricCredentials) {
             // User has biometric enrolled - show biometric prompt to verify identity
             console.log('✓ Valid token found + biometric credentials exist, showing biometric prompt');
-            setRequireBiometricAuth(true);
             setShowBiometricPrompt(true);
             setIsLoading(false);
             return; // Wait for biometric verification
@@ -194,7 +192,6 @@ function AppContent() {
       setShowBiometricPrompt(false);
     }
     setShowBiometricPrompt(false);
-    setRequireBiometricAuth(false);
   };
 
   const handleBiometricCancel = () => {
@@ -207,7 +204,6 @@ function AppContent() {
   const handlePasswordVerificationSuccess = (result) => {
     console.log('✅ Password verification successful');
     setShowPasswordPrompt(false);
-    setRequireBiometricAuth(false);
     
     // Get user from result or localStorage
     const userData = result?.user || JSON.parse(localStorage.getItem('fdt_user') || 'null');
@@ -248,7 +244,7 @@ function AppContent() {
   return (
     <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <div className="min-h-screen bg-gray-50">
-        {/* Biometric Prompt Overlay - Mandatory if requireBiometricAuth is true */}
+        {/* Biometric Prompt Overlay */}
         {showBiometricPrompt && (
           <BiometricPrompt
             onSuccess={handleBiometricSuccess}

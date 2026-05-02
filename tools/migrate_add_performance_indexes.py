@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-DB_URL = os.getenv("DB_URL", "postgresql://fdt:fdtpass@localhost:5432/fdt_db")
+DB_URL = os.getenv("DB_URL", "").strip()
 
 def main():
     print("🔧 Adding performance indexes for transactions...")

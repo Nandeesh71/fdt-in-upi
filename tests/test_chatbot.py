@@ -18,7 +18,7 @@ def test_chatbot():
     print()
     
     # Get configuration
-    db_url = os.getenv("DB_URL", "postgresql://fdt:fdtpass@127.0.0.1:5433/fdt_db")
+    db_url = os.getenv("DB_URL", "").strip()
     groq_key = os.getenv("GROQ_API_KEY")
     
     print(f"Database URL: {db_url[:30]}...")

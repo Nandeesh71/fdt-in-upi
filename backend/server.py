@@ -7,6 +7,7 @@ import sys
 import uuid
 import json
 import asyncio
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Any, Optional
 from decimal import Decimal
@@ -17,14 +18,22 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
-from argon2 import PasswordHasher
 import bcrypt
 
-# Use argon2 directly to avoid passlib bcrypt compatibility issues
-pwd_hasher = PasswordHasher()
+try:
+    from argon2 import PasswordHasher
+    pwd_hasher = PasswordHasher()
+except ImportError:
+    PasswordHasher = None
+    pwd_hasher = None
+
 import jwt
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.interval import IntervalTrigger
+try:
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    from apscheduler.triggers.interval import IntervalTrigger
+except ImportError:
+    AsyncIOScheduler = None
+    IntervalTrigger = None
 
 import psycopg2
 import psycopg2.extras
@@ -86,10 +95,13 @@ def _fire_ws_event(loop, coro):
 from dotenv import load_dotenv
 import yaml
 from pathlib import Path
-load_dotenv()
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(ROOT_DIR / ".env")
+load_dotenv(ROOT_DIR / ".env.local", override=True)
 
 # Configuration
-DEFAULT_DB_URL = "postgresql://fdt:fdtpass@host.docker.internal:5432/fdt_db"
+DEFAULT_DB_URL = ""
 CFG_PATH = Path(__file__).resolve().parent.parent / "config" / "config.yaml"
 
 def _load_cfg_db_url() -> str:
@@ -103,15 +115,24 @@ def _load_cfg_db_url() -> str:
         except UnicodeDecodeError:
             text = raw.decode("utf-8-sig")
         cfg = yaml.safe_load(text) or {}
-        return str(cfg.get("db_url", "")).strip()
+        return str(
+            cfg.get("db_url")
+            or cfg.get("database_url")
+            or cfg.get("supabase_db_url")
+            or ""
+        ).strip()
     except Exception as e:
         print(f"⚠ Failed to load config.yaml DB URL: {e}")
         return ""
 
-env_db_url = os.getenv("DB_URL")
-cfg_db_url = _load_cfg_db_url()
-DB_URL = (env_db_url or cfg_db_url or DEFAULT_DB_URL).strip()
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+DB_URL = (
+    os.getenv("DB_URL")
+    or os.getenv("DATABASE_URL")
+    or os.getenv("SUPABASE_DB_URL")
+    or _load_cfg_db_url()
+    or DEFAULT_DB_URL
+).strip()
+REDIS_URL = os.getenv("REDIS_URL", "").strip()
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "fdt_jwt_secret_key_change_in_production")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24
@@ -124,6 +145,10 @@ redis_client = None
 def init_redis():
     """Initialize Redis connection for caching"""
     global redis_client
+    if not REDIS_URL:
+        print("ℹ Redis URL not configured. Caching disabled, using direct DB queries.")
+        redis_client = None
+        return False
     try:
         redis_client = redis.from_url(REDIS_URL, decode_responses=True)
         redis_client.ping()
@@ -170,8 +195,22 @@ class RateLimiter:
 
 rate_limiter = RateLimiter(max_requests=100, window_seconds=60)  # 100 requests per minute
 
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Use FastAPI lifespan hooks instead of deprecated on_event startup."""
+    startup_event()
+    try:
+        yield
+    finally:
+        try:
+            if scheduler and scheduler.running:
+                scheduler.shutdown(wait=False)
+        except Exception as e:
+            print(f"[WARN] Scheduler shutdown error: {e}")
+
 # Initialize FastAPI app and scheduler
-app = FastAPI(title="FDT API", version="1.0.0")
+app = FastAPI(title="FDT API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -186,7 +225,7 @@ app.add_middleware(
 )
 
 
-scheduler = AsyncIOScheduler()
+scheduler = AsyncIOScheduler() if AsyncIOScheduler else None
 
 
 @app.get("/health")
@@ -227,13 +266,16 @@ async def rate_limit_middleware(request: Request, call_next):
     
     return await call_next(request)
 
-# Startup event to initialize database schema and Redis cache
-@app.on_event("startup")
+# Startup initialization for schema and scheduler
 def startup_event():
     """Initialize database schema and Redis cache on startup"""
     # Initialize Redis cache
     init_redis()
-    
+
+    if not DB_URL:
+        print("⚠ DB_URL is not set. Skipping database schema initialization.")
+        return
+    conn = None
     try:
         conn = get_db_conn()
         cur = conn.cursor()
@@ -251,6 +293,12 @@ def startup_event():
                 cur.execute(f"ALTER TABLE transactions ADD COLUMN IF NOT EXISTS {column_name} {column_def}")
             except Exception as e:
                 print(f"Column {column_name} already exists or error: {e}")
+
+        # Persist model explainability JSON for newer analytics/UI flows.
+        try:
+            cur.execute("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS explainability JSONB")
+        except Exception as e:
+            print(f"Column explainability already exists or error: {e}")
         
         # Step 3: Create transaction_ledger table
         cur.execute("""
@@ -323,6 +371,11 @@ def startup_event():
             cur.execute("ALTER TABLE user_credentials ADD COLUMN IF NOT EXISTS credential_name VARCHAR(255)")
         except Exception:
             pass
+        # Backward compatibility for older biometric flow that used device_name.
+        try:
+            cur.execute("ALTER TABLE user_credentials ADD COLUMN IF NOT EXISTS device_name VARCHAR(255)")
+        except Exception:
+            pass
         try:
             cur.execute("ALTER TABLE user_credentials ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE")
         except Exception:
@@ -363,19 +416,22 @@ def startup_event():
         except Exception as e:
             print(f"[WARN] Error closing database connection: {e}")
     
-    # Start the scheduler
-    try:
-        scheduler.add_job(
-            auto_refund_delayed_transactions,
-            trigger=IntervalTrigger(minutes=1),  # Run every 1 minute
-            id="auto_refund_job",
-            name="Auto-refund delayed transactions",
-            replace_existing=True
-        )
-        scheduler.start()
-        print("✓ Auto-refund scheduler started")
-    except Exception as e:
-        print(f"⚠ Warning: Could not start scheduler: {e}")
+    # Start the scheduler when APScheduler is installed.
+    if not scheduler or not IntervalTrigger:
+        print("ℹ APScheduler not installed. Auto-refund background job is disabled.")
+    else:
+        try:
+            scheduler.add_job(
+                auto_refund_delayed_transactions,
+                trigger=IntervalTrigger(minutes=1),  # Run every 1 minute
+                id="auto_refund_job",
+                name="Auto-refund delayed transactions",
+                replace_existing=True
+            )
+            scheduler.start()
+            print("✓ Auto-refund scheduler started")
+        except Exception as e:
+            print(f"⚠ Warning: Could not start scheduler: {e}")
 
 async def auto_refund_delayed_transactions():
     """Auto-refund transactions that have been delayed for more than 5 minutes"""
@@ -465,6 +521,8 @@ async def auto_refund_delayed_transactions():
 
 def get_db_conn():
     """Get PostgreSQL database connection"""
+    if not DB_URL:
+        raise RuntimeError("Database URL is not set")
     return psycopg2.connect(DB_URL, cursor_factory=psycopg2.extras.RealDictCursor)
 
 # =========================================================================
@@ -507,6 +565,21 @@ def dict_to_json_serializable(data):
     elif isinstance(data, datetime):
         return data.isoformat()
     return data
+
+def _table_has_column(cur, table_name: str, column_name: str) -> bool:
+    """Check if a column exists on a table in current schema."""
+    cur.execute(
+        """
+        SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_name = %s AND column_name = %s
+        ) AS has_column
+        """,
+        (table_name, column_name),
+    )
+    row = cur.fetchone()
+    return bool(row and row.get("has_column"))
 
 # ============================================================================
 # PYDANTIC MODELS
@@ -576,10 +649,14 @@ def verify_password(password_hash: str, password: str) -> bool:
     if password_hash.startswith("$2a$") or password_hash.startswith("$2b$") or password_hash.startswith("$2y$"):
         return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
 
-    try:
-        return pwd_hasher.verify(password_hash, password)
-    except Exception:
-        return False
+    if pwd_hasher:
+        try:
+            return pwd_hasher.verify(password_hash, password)
+        except Exception:
+            return False
+
+    # If argon2 hashes are stored but argon2 isn't installed, fail closed.
+    return False
 
 def create_access_token(user_id: str) -> str:
     """Create JWT access token with proper UTC timestamps"""
@@ -628,8 +705,9 @@ async def get_current_user(request: Request) -> str:
 async def register_user(user_data: UserRegister):
     """Register a new user"""
     def _register():
-        conn = get_db_conn()
+        conn = None
         try:
+            conn = get_db_conn()
             cur = conn.cursor()
             
             normalized_phone = normalize_phone(user_data.phone)
@@ -648,8 +726,14 @@ async def register_user(user_data: UserRegister):
             # Generate user ID
             user_id = f"user_{uuid.uuid4().hex[:8]}"
             
-            # Hash password
-            password_hash = pwd_hasher.hash(user_data.password)
+            # Prefer argon2 when available, otherwise fall back to bcrypt.
+            if pwd_hasher:
+                password_hash = pwd_hasher.hash(user_data.password)
+            else:
+                password_hash = bcrypt.hashpw(
+                    user_data.password.encode("utf-8"),
+                    bcrypt.gensalt(),
+                ).decode("utf-8")
             
             # Insert user
             cur.execute(
@@ -673,8 +757,25 @@ async def register_user(user_data: UserRegister):
                 "user": dict_to_json_serializable(dict(user)),
                 "token": token
             }
+        except RuntimeError as e:
+            raise HTTPException(
+                status_code=503,
+                detail="Database is not configured. Set DB_URL and start PostgreSQL before registering.",
+            ) from e
+        except psycopg2.Error as e:
+            print(f"❌ Registration database error: {e}")
+            raise HTTPException(
+                status_code=503,
+                detail="Database connection failed. Check PostgreSQL and DB_URL.",
+            ) from e
+        except HTTPException:
+            raise
+        except Exception as e:
+            print(f"❌ Registration error: {e}")
+            raise HTTPException(status_code=500, detail="Registration failed") from e
         finally:
-            conn.close()
+            if conn:
+                conn.close()
     
     return await run_in_threadpool(_register)
 
@@ -682,8 +783,9 @@ async def register_user(user_data: UserRegister):
 async def login_user(credentials: UserLogin):
     """Login user and return JWT token"""
     def _login():
-        conn = get_db_conn()
+        conn = None
         try:
+            conn = get_db_conn()
             cur = conn.cursor()
             
             normalized_phone = normalize_phone(credentials.phone)
@@ -715,8 +817,25 @@ async def login_user(credentials: UserLogin):
                 "user": dict_to_json_serializable(user_data),
                 "token": token
             }
+        except RuntimeError as e:
+            raise HTTPException(
+                status_code=503,
+                detail="Database is not configured. Set DB_URL and start PostgreSQL before logging in.",
+            ) from e
+        except psycopg2.Error as e:
+            print(f"❌ Login database error: {e}")
+            raise HTTPException(
+                status_code=503,
+                detail="Database connection failed. Check PostgreSQL and DB_URL.",
+            ) from e
+        except HTTPException:
+            raise
+        except Exception as e:
+            print(f"❌ Login error: {e}")
+            raise HTTPException(status_code=500, detail="Login failed") from e
         finally:
-            conn.close()
+            if conn:
+                conn.close()
     
     return await run_in_threadpool(_login)
 
@@ -1068,23 +1187,59 @@ async def register_credential(
             
             # Generate device name if not provided
             device_name = cred_data.device_name or f"Device {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}"
-            
-            # Insert credential
-            cur.execute(
-                """
-                INSERT INTO user_credentials 
-                (credential_id, user_id, public_key, device_name, transports, created_at, last_used)
-                VALUES (%s, %s, %s, %s, %s, NOW(), NOW())
-                RETURNING credential_id, device_name, created_at
-                """,
-                (
-                    cred_data.credential_id,
-                    user_id,
-                    cred_data.public_key,
-                    device_name,
-                    cred_data.transports
+            has_device_name = _table_has_column(cur, "user_credentials", "device_name")
+            has_credential_name = _table_has_column(cur, "user_credentials", "credential_name")
+
+            # Insert credential across legacy/new schemas.
+            if has_device_name and has_credential_name:
+                cur.execute(
+                    """
+                    INSERT INTO user_credentials
+                    (credential_id, user_id, public_key, device_name, credential_name, transports, created_at, last_used)
+                    VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW())
+                    RETURNING credential_id, COALESCE(device_name, credential_name) AS device_name, created_at
+                    """,
+                    (
+                        cred_data.credential_id,
+                        user_id,
+                        cred_data.public_key,
+                        device_name,
+                        device_name,
+                        cred_data.transports,
+                    ),
                 )
-            )
+            elif has_device_name:
+                cur.execute(
+                    """
+                    INSERT INTO user_credentials
+                    (credential_id, user_id, public_key, device_name, transports, created_at, last_used)
+                    VALUES (%s, %s, %s, %s, %s, NOW(), NOW())
+                    RETURNING credential_id, device_name, created_at
+                    """,
+                    (
+                        cred_data.credential_id,
+                        user_id,
+                        cred_data.public_key,
+                        device_name,
+                        cred_data.transports,
+                    ),
+                )
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO user_credentials
+                    (credential_id, user_id, public_key, credential_name, transports, created_at, last_used)
+                    VALUES (%s, %s, %s, %s, %s, NOW(), NOW())
+                    RETURNING credential_id, credential_name AS device_name, created_at
+                    """,
+                    (
+                        cred_data.credential_id,
+                        user_id,
+                        cred_data.public_key,
+                        device_name,
+                        cred_data.transports,
+                    ),
+                )
             
             credential = cur.fetchone()
             
@@ -1227,14 +1382,26 @@ async def list_credentials(user_id: str = Depends(get_current_user)):
         conn = get_db_conn()
         try:
             cur = conn.cursor()
+            has_device_name = _table_has_column(cur, "user_credentials", "device_name")
+            has_credential_name = _table_has_column(cur, "user_credentials", "credential_name")
+
+            if has_device_name and has_credential_name:
+                name_expr = "COALESCE(device_name, credential_name) AS device_name"
+            elif has_device_name:
+                name_expr = "device_name"
+            elif has_credential_name:
+                name_expr = "credential_name AS device_name"
+            else:
+                name_expr = "NULL::text AS device_name"
+
             cur.execute(
-                """
-                SELECT credential_id, device_name, transports, created_at, last_used
+                f"""
+                SELECT credential_id, {name_expr}, transports, created_at, last_used
                 FROM user_credentials
                 WHERE user_id = %s AND is_active = TRUE
                 ORDER BY created_at DESC
                 """,
-                (user_id,)
+                (user_id,),
             )
             credentials = cur.fetchall()
             
@@ -1508,8 +1675,9 @@ async def create_transaction(tx_data: TransactionCreate, user_id: str = Depends(
     """Create new transaction and perform fraud detection"""
     loop = asyncio.get_running_loop()
     def _create_transaction():
-        conn = get_db_conn()
+        conn = None
         try:
+            conn = get_db_conn()
             cur = conn.cursor()
             
             # Verify user exists
@@ -1569,6 +1737,12 @@ async def create_transaction(tx_data: TransactionCreate, user_id: str = Depends(
             risk_buffer_value = 0.0
             delay_threshold = float(os.getenv("DELAY_THRESHOLD", "0.30"))
             block_threshold = float(os.getenv("BLOCK_THRESHOLD", "0.60"))
+            scoring_details = {}
+            fraud_reasons_list = []
+            features = {}
+            trust_score = None
+            graph_risk = 0.0
+            graph_details = {}
             try:
                 # Ensure project root is on sys.path for app module imports
                 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -1746,20 +1920,61 @@ async def create_transaction(tx_data: TransactionCreate, user_id: str = Depends(
             # Remove None values for cleaner JSON
             explainability = {k: v for k, v in explainability.items() if v is not None}
 
-            # Insert transaction with explainability
-            cur.execute(
-                """
-                INSERT INTO transactions 
-                (tx_id, user_id, device_id, ts, amount, recipient_vpa, tx_type, channel, 
-                 risk_score, action, db_status, remarks, receiver_user_id, amount_deducted_at, created_at, explainability)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s)
-                RETURNING tx_id, user_id, amount, recipient_vpa, risk_score, action, db_status, created_at
-                """,
-                (tx_id, user_id, device_id, transaction["ts"], tx_data.amount, 
-                 tx_data.recipient_vpa, transaction["tx_type"], "app", 
-                 risk_score, action, db_status, tx_data.remarks, receiver_user_id, amount_deducted_at,
-                 psycopg2.extras.Json(explainability))
-            )
+            # Insert transaction with backward compatibility for older schemas.
+            has_explainability = _table_has_column(cur, "transactions", "explainability")
+            if has_explainability:
+                cur.execute(
+                    """
+                    INSERT INTO transactions
+                    (tx_id, user_id, device_id, ts, amount, recipient_vpa, tx_type, channel,
+                     risk_score, action, db_status, remarks, receiver_user_id, amount_deducted_at, created_at, explainability)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s)
+                    RETURNING tx_id, user_id, amount, recipient_vpa, risk_score, action, db_status, created_at
+                    """,
+                    (
+                        tx_id,
+                        user_id,
+                        device_id,
+                        transaction["ts"],
+                        tx_data.amount,
+                        tx_data.recipient_vpa,
+                        transaction["tx_type"],
+                        "app",
+                        risk_score,
+                        action,
+                        db_status,
+                        tx_data.remarks,
+                        receiver_user_id,
+                        amount_deducted_at,
+                        psycopg2.extras.Json(explainability),
+                    ),
+                )
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO transactions
+                    (tx_id, user_id, device_id, ts, amount, recipient_vpa, tx_type, channel,
+                     risk_score, action, db_status, remarks, receiver_user_id, amount_deducted_at, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                    RETURNING tx_id, user_id, amount, recipient_vpa, risk_score, action, db_status, created_at
+                    """,
+                    (
+                        tx_id,
+                        user_id,
+                        device_id,
+                        transaction["ts"],
+                        tx_data.amount,
+                        tx_data.recipient_vpa,
+                        transaction["tx_type"],
+                        "app",
+                        risk_score,
+                        action,
+                        db_status,
+                        tx_data.remarks,
+                        receiver_user_id,
+                        amount_deducted_at,
+                    ),
+                )
             
             result = cur.fetchone()
             
@@ -1911,8 +2126,28 @@ async def create_transaction(tx_data: TransactionCreate, user_id: str = Depends(
                 "receiver_user_id": receiver_user_id,
                 "fraud_reasons": fraud_reasons_list
             }
+        except RuntimeError as e:
+            raise HTTPException(
+                status_code=503,
+                detail="Database is not configured. Set DB_URL and start PostgreSQL before creating transactions.",
+            ) from e
+        except psycopg2.Error as e:
+            if conn:
+                conn.rollback()
+            print(f"❌ Transaction database error: {e}")
+            raise HTTPException(status_code=500, detail="Transaction processing failed") from e
+        except HTTPException:
+            if conn:
+                conn.rollback()
+            raise
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            print(f"❌ Transaction error: {e}")
+            raise HTTPException(status_code=500, detail="Transaction processing failed") from e
         finally:
-            conn.close()
+            if conn:
+                conn.close()
     
     return await run_in_threadpool(_create_transaction)
 

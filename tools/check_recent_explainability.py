@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DB_URL = os.getenv("DB_URL") or "postgresql://fdt:fdtpass@127.0.0.1:5433/fdt_db"
+DB_URL = os.getenv("DB_URL", "").strip()
 
 conn = psycopg2.connect(DB_URL, cursor_factory=psycopg2.extras.RealDictCursor)
 cur = conn.cursor()

@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DB_URL = os.getenv("DB_URL") or "postgresql://fdt:fdtpass@127.0.0.1:5433/fdt_db"
+DB_URL = os.getenv("DB_URL", "").strip()
 
 DDL = """
 ALTER TABLE public.transactions

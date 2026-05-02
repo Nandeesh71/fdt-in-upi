@@ -69,7 +69,7 @@
 [ ] REDIS_URL=<redirect to real Redis>
 [ ] JWT_SECRET_KEY=<strong random key, NOT "fdt_jwt_secret_key_change_in_production">
 [ ] JWT_EXPIRATION_HOURS=24
-[ ] DB_URL=<PostgreSQL connection>
+[ ] DB_URL=<set in your environment>
 ```
 
 #### Frontend `.env` or deployment config

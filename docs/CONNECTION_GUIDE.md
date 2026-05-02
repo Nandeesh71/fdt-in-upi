@@ -45,13 +45,13 @@ This document details all database and server connections in the FDT system.
 ### PostgreSQL Database
 
 **Configuration Files:**
-- Primary: `config/config.yaml` → `db_url`
-- Override: Environment variable `DB_URL`
-- Fallback: Default in code
+- Source: Environment variable `DB_URL`
+- Local set: `.env` or shell environment
+- No hardcoded fallback in code
 
 **Connection URL:**
 ```
-postgresql://fdt:fdtpass@127.0.0.1:5432/fdt_db
+postgresql://<user>:<password>@<host>:5432/<database>?sslmode=require
 ```
 
 **Components:**
@@ -104,7 +104,7 @@ redis:
 **Variables:**
 ```bash
 # Database Connection
-DB_URL=postgresql://fdt:fdtpass@127.0.0.1:5432/fdt_db
+DB_URL=<set in your environment>
 
 # Redis Cache (optional)
 REDIS_URL=redis://localhost:6379/0
@@ -145,7 +145,7 @@ REACT_APP_FIREBASE_ENABLED=false
 
 **Key Variables:**
 ```yaml
-db_url: postgresql://fdt:fdtpass@127.0.0.1:5432/fdt_db
+db_url: <set in your environment>
 secret_key: qdqBymrlHc4wrM_E2TfifjUjnEsjxh-9NGKCQaecrQw
 
 admin_users:
@@ -297,7 +297,7 @@ python tests/test_db_conn.py
 
 ```bash
 # Direct PostgreSQL connection
-psql postgresql://fdt:fdtpass@127.0.0.1:5432/fdt_db
+psql "$DB_URL"
 
 # Test query
 SELECT version();
@@ -416,7 +416,7 @@ fetch(`${process.env.REACT_APP_BACKEND_URL}/api/transactions`, {
 
 **Solutions:**
 1. Check Docker container running: `docker compose ps`
-2. Verify credentials in .env: `DB_URL=postgresql://fdt:fdtpass@127.0.0.1:5432/fdt_db`
+2. Verify `DB_URL` is set in your environment or local `.env`
 3. Restart database: `docker compose restart db`
 4. Check logs: `docker compose logs db`
 

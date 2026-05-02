@@ -211,7 +211,7 @@ JWT_SECRET_KEY=change_this_in_production
 JWT_EXPIRATION_HOURS=24
 
 # Database (existing)
-DB_URL=postgresql://user:pass@host/fdt_db
+DB_URL=<set in your environment>
 ```
 
 ### Frontend Required (.env)

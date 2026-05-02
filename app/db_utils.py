@@ -4,8 +4,8 @@ import psycopg2
 import psycopg2.extras
 from datetime import datetime, timezone, timedelta
 
-# read DB URL from env or config file path; keep same default as main
-DB_URL = os.environ.get("DB_URL") or "postgresql://fdt:fdtpass@host.docker.internal:5432/fdt_db"
+# read DB URL from environment only
+DB_URL = os.environ.get("DB_URL", "").strip()
 
 def _get_conn():
     return psycopg2.connect(DB_URL, cursor_factory=psycopg2.extras.RealDictCursor)

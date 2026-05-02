@@ -9,6 +9,8 @@ Enhanced ML Training Pipeline for UPI Fraud Detection
 import random
 import uuid
 import json
+import os
+import sys
 from datetime import datetime, timedelta, timezone
 import numpy as np
 import joblib
@@ -19,6 +21,10 @@ from sklearn.metrics import (
     roc_auc_score, precision_recall_curve, auc
 )
 import xgboost as xgb
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
 from app.upi_transaction_id import generate_upi_transaction_id
 

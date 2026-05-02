@@ -143,7 +143,7 @@ class ErrorHandler {
     // Extract server error message if available
     let serverMessage = customMessage;
     if (!serverMessage && error?.response?.data) {
-      serverMessage = error.response.data.message || error.response.data.error;
+      serverMessage = error.response.data.detail || error.response.data.message || error.response.data.error;
     }
 
     return {

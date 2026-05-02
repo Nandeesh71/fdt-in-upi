@@ -38,7 +38,9 @@ except Exception as e:
 
 # Load environment variables from .env file
 from dotenv import load_dotenv
-load_dotenv()
+ROOT_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(ROOT_DIR / ".env")
+load_dotenv(ROOT_DIR / ".env.local", override=True)
 
 # =========================================================================
 # UTILITY FUNCTIONS
@@ -91,11 +93,8 @@ def attach_confidence_level(payload: Any, default: str = "HIGH") -> Any:
         payload.setdefault("confidence_level", extract_confidence_level(payload, default))
     return payload
 
-# --- config loader with defaults ---
-# Prefer workspace config/config.yaml; fallback to env; final fallback to defaults.
 CFG_PATH = os.path.join(os.getcwd(), "config", "config.yaml")
 DEFAULT_CFG = {
-    "db_url": "postgresql://fdt:fdtpass@host.docker.internal:5432/fdt_db",
     "thresholds": {"delay": 0.30, "block": 0.60},
     # Use environment variable for production; default is for development only
     "secret_key": os.getenv("SECRET_KEY", "dev-secret-change-me-in-production"),
@@ -140,8 +139,7 @@ if os.path.exists(CFG_PATH):
     except Exception as e:
         print("Failed to load config.yaml:", e)
 
-env_db_url = os.getenv("DB_URL")
-DB_URL = env_db_url or cfg.get("db_url")
+DB_URL = os.getenv("DB_URL", "").strip()
 
 DEFAULT_THRESHOLDS = {
     "allowMax": 0.30,
@@ -518,23 +516,31 @@ def db_aggregate_fraud_patterns(time_range: str = "24h", limit: int = None):
     conn = get_conn()
     try:
         cur = conn.cursor()
+        has_expl = _ensure_explainability_column(conn)
+        explainability_col = "explainability" if has_expl else "NULL::jsonb AS explainability"
         
         since = parse_time_range(time_range)
         if since:
-            cur.execute("""
-                SELECT explainability, risk_score, action
+            cur.execute(
+                f"""
+                SELECT {explainability_col}, risk_score, action
                 FROM public.transactions
                 WHERE ts >= %s
                 ORDER BY ts DESC
-            """, (since,))
+                """,
+                (since,),
+            )
         else:
             max_limit = limit if limit else 1000
-            cur.execute("""
-                SELECT explainability, risk_score, action
+            cur.execute(
+                f"""
+                SELECT {explainability_col}, risk_score, action
                 FROM public.transactions
                 ORDER BY ts DESC
                 LIMIT %s
-            """, (max_limit,))
+                """,
+                (max_limit,),
+            )
         
         rows = cur.fetchall()
         

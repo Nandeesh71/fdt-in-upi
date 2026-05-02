@@ -8,12 +8,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Database connection
-DEFAULT_DB_URL = "postgresql://fdt:fdtpass@host.docker.internal:5432/fdt_db"
-DB_URL = os.getenv("DB_URL", DEFAULT_DB_URL)
+DB_URL = os.getenv("DB_URL", "").strip()
 
-print(f"Connecting to database: {DB_URL[:50]}...")
+print(f"Connecting to database: {DB_URL[:50]}..." if DB_URL else "No DB_URL configured")
 
 try:
+    if not DB_URL:
+        raise ValueError("DB_URL environment variable is not set")
     conn = psycopg2.connect(DB_URL)
     cur = conn.cursor()
     

@@ -172,17 +172,6 @@ const getUserFriendlyError = (error, context = 'authentication') => {
   return msg || fallback;
 };
 
-// ─── Input Validation ────────────────────────────────────────────────────────
-const validatePhoneNumber = (phone) => {
-  if (!phone || typeof phone !== 'string') return false;
-  return /^[\d\s\-\+\(\)]{7,}$/.test(phone.replace(/[+\-\s()]/g, ''));
-};
-
-const validateUserId = (userId) => {
-  if (!userId || typeof userId !== 'string') return false;
-  return userId.length > 0 && userId.length < 256;
-};
-
 // ─── Buffer Helpers ──────────────────────────────────────────────────────────
 const base64urlToBuffer = (base64url) => {
   if (typeof base64url !== 'string') throw new Error('Expected string for base64url conversion');

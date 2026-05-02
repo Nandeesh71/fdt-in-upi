@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DB_URL = os.getenv("DB_URL", "postgresql://user:password@host:port/dbname").strip()
+DB_URL = os.getenv("DB_URL", "").strip()
 
 def add_daily_limit_column():
     """Add daily_limit column to users table"""

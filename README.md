@@ -427,7 +427,7 @@ python train/train_models.py
 
 ```bash
 # Database
-DB_URL=postgresql://fdt:fdtpass@127.0.0.1:5432/fdt_db
+DB_URL=<set in your environment>
 
 # Redis
 REDIS_URL=redis://localhost:6379/0

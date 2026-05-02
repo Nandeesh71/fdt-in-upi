@@ -12,7 +12,7 @@ import os
 from datetime import datetime, timezone, timedelta
 
 # Database connection
-DB_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost/fdt_db")
+DB_URL = os.getenv("DATABASE_URL", "").strip()
 
 def measure_query(name, query, params=None):
     """Measure query execution time"""

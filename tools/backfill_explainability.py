@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 load_dotenv()
 
-DB_URL = os.getenv("DB_URL") or "postgresql://fdt:fdtpass@127.0.0.1:5432/fdt_db"
+DB_URL = os.getenv("DB_URL", "").strip()
 
 
 def load_scoring_module():
